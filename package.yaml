@@ -1,7 +1,7 @@
 name:                monadic-games-club
 version:             0.1.0.0
 homepage:            https://github.com/silky/monadic-games-club
-license:             Hippocratic
+license:             OtherLicense
 extra-source-files:
 - README.md
 
