@@ -1,0 +1,33 @@
+name:                monadic-games-club
+version:             0.1.0.0
+homepage:            https://github.com/silky/monadic-games-club
+license:             Hippocratic
+extra-source-files:
+- README.md
+
+dependencies:
+  - base >= 4.7 && < 5
+  - text
+
+default-extensions:
+  - DeriveAnyClass
+  - DeriveGeneric
+  - DerivingStrategies
+  - ImportQualifiedPost
+  - OverloadedStrings
+  - PackageImports
+  - ScopedTypeVariables
+  - TypeApplications
+
+ghc-options:
+- -Wall
+- -Wcompat
+- -Widentities
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wmissing-home-modules
+- -Wpartial-fields
+- -Wredundant-constraints
+
+library:
+  source-dirs: src
