@@ -21,17 +21,27 @@ library
   hs-source-dirs:
       src
   default-extensions:
+      DataKinds
       DeriveAnyClass
       DeriveGeneric
       DerivingStrategies
+      DerivingVia
+      EmptyCase
+      GADTs
+      GeneralizedNewtypeDeriving
       ImportQualifiedPost
+      NamedFieldPuns
       OverloadedStrings
       PackageImports
       ScopedTypeVariables
+      StandaloneDeriving
+      StandaloneKindSignatures
       TypeApplications
+      TypeFamilies
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.15 && <4.19
     , crem
+    , singletons-base
     , text
   default-language: Haskell2010

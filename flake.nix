@@ -43,6 +43,7 @@
 
               (hask.ghcWithPackages (ps: with ps; [
                 crem
+                singletons-base
                 text
               ]))
             ];

@@ -9,16 +9,26 @@ dependencies:
   - base >= 4.15 && < 4.19
   - text
   - crem
+  - singletons-base
 
 default-extensions:
+  - DataKinds
   - DeriveAnyClass
   - DeriveGeneric
   - DerivingStrategies
+  - DerivingVia
+  - EmptyCase
+  - GADTs
+  - GeneralizedNewtypeDeriving
   - ImportQualifiedPost
+  - NamedFieldPuns
   - OverloadedStrings
   - PackageImports
   - ScopedTypeVariables
+  - StandaloneDeriving
+  - StandaloneKindSignatures
   - TypeApplications
+  - TypeFamilies
 
 ghc-options:
 - -Wall
