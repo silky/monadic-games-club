@@ -6,8 +6,9 @@ extra-source-files:
 - README.md
 
 dependencies:
-  - base >= 4.7 && < 5
+  - base >= 4.15 && < 4.19
   - text
+  - crem
 
 default-extensions:
   - DeriveAnyClass

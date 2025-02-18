@@ -1,10 +1,11 @@
 {
   inputs = {
-    flake-utils.url     = "github:numtide/flake-utils";
-    nixpkgs.url         = "github:NixOS/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url     = "github:NixOS/nixpkgs/nixos-unstable";
+    crem.url        = "github:marcosh/crem";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, flake-utils, crem }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -22,7 +23,7 @@
                 ${pkgs.hpack}/bin/hpack >/dev/null 2>&1
                 ${pkgs.cabal-install}/bin/cabal "$@"
               '';
-              hask = pkgs.haskell.packages.ghc98.override {
+              hask = pkgs.haskell.packages.ghc96.override {
                 overrides = self: super: {
                   # elm-street =
                   # let src = pkgs.fetchgit {
@@ -41,20 +42,8 @@
               watchWithGhcid
 
               (hask.ghcWithPackages (ps: with ps; [
-                HUnit
-                QuickCheck
-                bytestring
-                containers
-                directory
-                filepath
-                generic-lens
-                hspec
-                lens
-                mtl
-                optparse-applicative
-                optparse-generic
+                crem
                 text
-                time
               ]))
             ];
           };
