@@ -19,12 +19,16 @@ default-extensions:
   - BinaryLiterals
   - ConstrainedClassMethods
   - ConstraintKinds
+  - DataKinds
+  - DeriveAnyClass
   - DeriveDataTypeable
   - DeriveFoldable
   - DeriveFunctor
   - DeriveGeneric
   - DeriveLift
   - DeriveTraversable
+  - DerivingStrategies
+  - DerivingVia
   - DoAndIfThenElse
   - EmptyCase
   - EmptyDataDecls
@@ -46,6 +50,7 @@ default-extensions:
   - NamedFieldPuns
   - NamedWildCards
   - NumericUnderscores
+  - PackageImports
   - PatternGuards
   - PolyKinds
   - PostfixOperators
@@ -58,27 +63,25 @@ default-extensions:
   - TraditionalRecordSyntax
   - TupleSections
   - TypeApplications
+  - TypeFamilies
   - TypeOperators
   - TypeSynonymInstances
-  - PackageImports
-  - DerivingStrategies
 
 ghc-options:
   # Enable every warning GHC supports
   - -Weverything                   # https://downloads.haskell.org/ghc/latest/docs/users_guide/using-warnings.html#ghc-flag--Weverything
 
   # Turn off the warnings we don't care about.
-  - -Wno-safe                      # https://downloads.haskell.org/ghc/latest/docs/users_guide/exts/safe_haskell.html#ghc-flag--Wsafe
-  - -Wno-unsafe                    # https://downloads.haskell.org/ghc/latest/docs/users_guide/exts/safe_haskell.html#ghc-flag--Wunsafe
-  - -Wno-missing-safe-haskell-mode # https://downloads.haskell.org/ghc/latest/docs/users_guide/exts/safe_haskell.html#ghc-flag--Wmissing-safe-haskell-mode
-  - -Wno-implicit-prelude          # https://downloads.haskell.org/ghc/latest/docs/users_guide/using-warnings.html#ghc-flag--Wimplicit-prelude
-  - -Wno-missing-export-lists      # https://downloads.haskell.org/ghc/latest/docs/users_guide/using-warnings.html#ghc-flag--Wmissing-export-lists
-  - -Wno-missing-home-modules      # https://downloads.haskell.org/ghc/latest/docs/users_guide/using-warnings.html#ghc-flag--Wmissing-home-modules
-  - -Wno-missing-import-lists      # https://downloads.haskell.org/ghc/latest/docs/users_guide/using-warnings.html#ghc-flag--Wmissing-import-lists
-  - -Wno-all-missed-specialisations    # https://downloads.haskell.org/ghc/latest/docs/users_guide/using-warnings.html#ghc-flag--Wall-missed-specialisations
-  - -Wno-prepositive-qualified-module  # https://downloads.haskell.org/ghc/latest/docs/users_guide/using-warnings.html#ghc-flag--Wprepositive-qualified-module
-# https://downloads.haskell.org/ghc/latest/docs/users_guide/using-warnings.html#ghc-flag--Wmissing-kind-signatures
-- -Wno-missing-kind-signatures
+  - -Wno-all-missed-specialisations
+  - -Wno-implicit-prelude
+  - -Wno-missing-export-lists
+  - -Wno-missing-home-modules
+  - -Wno-missing-import-lists
+  - -Wno-missing-kind-signatures
+  - -Wno-missing-safe-haskell-mode
+  - -Wno-prepositive-qualified-module
+  - -Wno-safe
+  - -Wno-unsafe
 
 library:
   source-dirs: src

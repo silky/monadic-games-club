@@ -1,10 +1,6 @@
 {-# language DuplicateRecordFields #-}
 {-# language TemplateHaskell       #-}
 {-# language UndecidableInstances  #-}
-{-# language TypeFamilies  #-}
-{-# language DerivingVia  #-}
-{-# language DeriveAnyClass  #-}
-{-# language DataKinds  #-}
 
 -- https://downloads.haskell.org/ghc/latest/docs/users_guide/using-warnings.html#ghc-flag--Wmissing-deriving-strategies
 {-# OPTIONS_GHC -Wno-missing-deriving-strategies #-}
