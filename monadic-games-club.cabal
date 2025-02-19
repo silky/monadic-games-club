@@ -21,57 +21,13 @@ library
   hs-source-dirs:
       src
   default-extensions:
-      BangPatterns
-      BinaryLiterals
-      ConstrainedClassMethods
-      ConstraintKinds
       DataKinds
       DeriveAnyClass
-      DeriveDataTypeable
-      DeriveFoldable
-      DeriveFunctor
-      DeriveGeneric
       DeriveLift
-      DeriveTraversable
       DerivingStrategies
       DerivingVia
-      DoAndIfThenElse
-      EmptyCase
-      EmptyDataDecls
-      EmptyDataDeriving
-      ExistentialQuantification
-      ExplicitForAll
-      FlexibleContexts
-      FlexibleInstances
-      ForeignFunctionInterface
-      GADTSyntax
-      GeneralisedNewtypeDeriving
-      HexFloatLiterals
-      ImplicitPrelude
-      ImportQualifiedPost
-      InstanceSigs
-      KindSignatures
-      MonomorphismRestriction
-      MultiParamTypeClasses
-      NamedFieldPuns
-      NamedWildCards
-      NumericUnderscores
       PackageImports
-      PatternGuards
-      PolyKinds
-      PostfixOperators
-      RankNTypes
-      RelaxedPolyRec
-      ScopedTypeVariables
-      StandaloneDeriving
-      StandaloneKindSignatures
-      StarIsType
-      TraditionalRecordSyntax
-      TupleSections
-      TypeApplications
       TypeFamilies
-      TypeOperators
-      TypeSynonymInstances
   ghc-options: -Weverything -Wno-all-missed-specialisations -Wno-implicit-prelude -Wno-missing-export-lists -Wno-missing-home-modules -Wno-missing-import-lists -Wno-missing-kind-signatures -Wno-missing-safe-haskell-mode -Wno-prepositive-qualified-module -Wno-safe -Wno-unsafe
   build-depends:
       base >=4.15 && <4.19

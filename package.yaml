@@ -3,7 +3,7 @@ version:             0.1.0.0
 homepage:            https://github.com/silky/monadic-games-club
 license:             OtherLicense
 extra-source-files:
-- README.md
+  - README.md
 
 dependencies:
   - base >= 4.15 && < 4.19
@@ -14,61 +14,17 @@ language:
   GHC2021
 
 default-extensions:
-  - BangPatterns
-  - BinaryLiterals
-  - ConstrainedClassMethods
-  - ConstraintKinds
   - DataKinds
   - DeriveAnyClass
-  - DeriveDataTypeable
-  - DeriveFoldable
-  - DeriveFunctor
-  - DeriveGeneric
   - DeriveLift
-  - DeriveTraversable
   - DerivingStrategies
   - DerivingVia
-  - DoAndIfThenElse
-  - EmptyCase
-  - EmptyDataDecls
-  - EmptyDataDeriving
-  - ExistentialQuantification
-  - ExplicitForAll
-  - FlexibleContexts
-  - FlexibleInstances
-  - ForeignFunctionInterface
-  - GADTSyntax
-  - GeneralisedNewtypeDeriving
-  - HexFloatLiterals
-  - ImplicitPrelude
-  - ImportQualifiedPost
-  - InstanceSigs
-  - KindSignatures
-  - MonomorphismRestriction
-  - MultiParamTypeClasses
-  - NamedFieldPuns
-  - NamedWildCards
-  - NumericUnderscores
   - PackageImports
-  - PatternGuards
-  - PolyKinds
-  - PostfixOperators
-  - RankNTypes
-  - RelaxedPolyRec
-  - ScopedTypeVariables
-  - StandaloneDeriving
-  - StandaloneKindSignatures
-  - StarIsType
-  - TraditionalRecordSyntax
-  - TupleSections
-  - TypeApplications
   - TypeFamilies
-  - TypeOperators
-  - TypeSynonymInstances
 
 ghc-options:
   # Enable every warning GHC supports
-  - -Weverything                   # https://downloads.haskell.org/ghc/latest/docs/users_guide/using-warnings.html#ghc-flag--Weverything
+  - -Weverything
 
   # Turn off the warnings we don't care about.
   - -Wno-all-missed-specialisations
