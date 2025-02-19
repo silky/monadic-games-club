@@ -30,6 +30,13 @@ import "crem" Crem.Topology
 import "singletons-base" Data.Singletons.Base.TH
 
 
+data A = A { a :: Int }
+data B = B { a :: Int }
+
+f :: B -> Int
+f = a
+
+
 -- * Domain
 
 data Suit
