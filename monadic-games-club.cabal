@@ -21,27 +21,57 @@ library
   hs-source-dirs:
       src
   default-extensions:
-      DataKinds
-      DeriveAnyClass
+      BangPatterns
+      BinaryLiterals
+      ConstrainedClassMethods
+      ConstraintKinds
+      DeriveDataTypeable
+      DeriveFoldable
+      DeriveFunctor
       DeriveGeneric
-      DerivingStrategies
-      DerivingVia
+      DeriveLift
+      DeriveTraversable
+      DoAndIfThenElse
       EmptyCase
-      GADTs
-      GeneralizedNewtypeDeriving
+      EmptyDataDecls
+      EmptyDataDeriving
+      ExistentialQuantification
+      ExplicitForAll
+      FlexibleContexts
+      FlexibleInstances
+      ForeignFunctionInterface
+      GADTSyntax
+      GeneralisedNewtypeDeriving
+      HexFloatLiterals
+      ImplicitPrelude
       ImportQualifiedPost
+      InstanceSigs
+      KindSignatures
+      MonomorphismRestriction
+      MultiParamTypeClasses
       NamedFieldPuns
-      OverloadedStrings
-      PackageImports
+      NamedWildCards
+      NumericUnderscores
+      PatternGuards
+      PolyKinds
+      PostfixOperators
+      RankNTypes
+      RelaxedPolyRec
       ScopedTypeVariables
       StandaloneDeriving
       StandaloneKindSignatures
+      StarIsType
+      TraditionalRecordSyntax
+      TupleSections
       TypeApplications
-      TypeFamilies
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+      TypeOperators
+      TypeSynonymInstances
+      PackageImports
+      DerivingStrategies
+  ghc-options: -Weverything -Wno-safe -Wno-unsafe -Wno-missing-safe-haskell-mode -Wno-implicit-prelude -Wno-missing-export-lists -Wno-missing-home-modules -Wno-missing-import-lists -Wno-all-missed-specialisations -Wno-prepositive-qualified-module
   build-depends:
       base >=4.15 && <4.19
     , crem
     , singletons-base
     , text
-  default-language: Haskell2010
+  default-language: GHC2021
