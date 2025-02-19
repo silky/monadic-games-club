@@ -77,5 +77,4 @@ library
       base >=4.15 && <4.19
     , crem
     , singletons-base
-    , text
   default-language: GHC2021
