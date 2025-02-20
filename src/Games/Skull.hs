@@ -38,6 +38,9 @@ import "singletons-base" Data.Singletons.Base.TH
 --  - [ ] Test game play
 --  - [ ] Generate gameplay quickcheck and count how many times we et into
 --        each state.
+--  - [ ] Double-check that the business about advancing players works
+--  - [ ] Do other checks of current player
+--  - [ ] Maybe tidy-up the current player stuff in general
 
 -- * Domain
 
@@ -120,11 +123,8 @@ data Event
   | BetPassed
   | PickedUp    Int
   | WonRound
-  -- | BetResolved  Outcome
   | FailedBet -- It's okay to fail a bet actually.
 
-
--- data Outcome
 
 -- * Topology
 
@@ -206,7 +206,6 @@ countStackOfPlayer playerId stateData =
   case Map.lookup playerId stateData.playerStacks of
     Nothing -> 0
     Just xs -> length xs
-
 
 data HitSkull = HitSkull
 
