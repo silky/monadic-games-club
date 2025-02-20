@@ -18,7 +18,9 @@ module Games.Skull where
   to make a "Bet" for how many cards they can pick up without hitting a Skull
   (starting with their own pile!)
 
-  They win if they do that; or lose if they don't.
+  They win the round if they do that; or lose if they don't.
+
+  If someone wins twice, they win the game.
 -}
 
 import "base" Data.Function ((&))
@@ -32,7 +34,10 @@ import "singletons-base" Data.Singletons.Base.TH
 
 -- TODO:
 --
---  - [ ] Limit the number of cards played.
+--  - [ ] Make the suits do something
+--  - [ ] Test game play
+--  - [ ] Generate gameplay quickcheck and count how many times we et into
+--        each state.
 
 -- * Domain
 
@@ -49,6 +54,12 @@ data Card
   = Flower Suit
   | Skull  Suit
   deriving stock (Eq, Show)
+
+maxFlowers :: Int
+maxFlowers = 4
+
+maxCards :: Int
+maxCards = maxFlowers + 1
 
 isSkull :: Card -> Bool
 isSkull (Skull _)  = True
@@ -156,6 +167,11 @@ countWins playerId stateData =
     Nothing -> 0
     Just n -> n
 
+playedSkull :: PlayerId -> StateData -> Bool
+playedSkull playerId stateData =
+  let cards = maybe [] id (Map.lookup playerId stateData.playerStacks)
+   in any isSkull cards
+
 recordWin :: PlayerId -> StateData -> StateData
 recordWin playerId stateData =
   stateData { winCounts = Map.insertWith (+) playerId 1 stateData.winCounts }
@@ -232,6 +248,8 @@ data GameError
   | GameNotStarted
   | CantPlaceWhileBetting
   | CantPickUpNow
+  | NoMoreCardsToPlay
+  | PlayedYourSkull
 
   -- ** Betting
   | BetMustBeHigher
@@ -276,6 +294,10 @@ decideSkulls command state = case (state, command) of
   -- ** Playing a card
   (SkullsPlacingCardsState stateData, PlayCard turnData)
     | stateData.currentPlayer /= turnData.playerId -> Left NotYourTurn
+    | countStackOfPlayer stateData.currentPlayer stateData == maxCards
+        -> Left NoMoreCardsToPlay
+    | playedSkull stateData.currentPlayer stateData
+        -> Left PlayedYourSkull
     | otherwise -> Right $ CardPlayed turnData
 
   (SkullsBettingSate {}, PlayCard _) -> Left CantPlaceWhileBetting
