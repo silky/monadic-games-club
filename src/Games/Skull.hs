@@ -28,6 +28,7 @@ import "crem" Crem.Decider (Decider (..), EvolutionResult (..))
 import "crem" Crem.Render.RenderableVertices (AllVertices (..), RenderableVertices)
 import "crem" Crem.Topology
 import "singletons-base" Data.Singletons.Base.TH
+import "base" Data.Either (isRight)
 
 -- TODO:
 --
@@ -48,6 +49,10 @@ data Card
   = Flower Suit
   | Skull  Suit
   deriving stock (Eq, Show)
+
+isSkull :: Card -> Bool
+isSkull (Skull _)  = True
+isSkull (Flower _) = False
 
 newtype PlayerId = PlayerId Int
   deriving newtype (Eq, Show, Num, Ord)
@@ -89,10 +94,13 @@ data PassData = PassData
 data Command
   = StartGame InitialData
   | PlayCard TurnData
+  -- * Betting
   | MakeBet BetData
   | PassBet PassData
-  | ResolveBet
+  -- * Resolving a bet
+  | PickUpMyStack
   | PickUpFrom PlayerId
+  | PickedUpSuccessfully Int
   deriving stock (Show)
 
 data Event
@@ -100,10 +108,13 @@ data Event
   | CardPlayed  TurnData
   | BetMade     BetData
   | BetPassed
-  | BetResolved  Outcome
+  | PickedUp    Int
+  | WonRound
+  -- | BetResolved  Outcome
+  | FailedBet -- It's okay to fail a bet actually.
 
 
-data Outcome
+-- data Outcome
 
 -- * Topology
 
@@ -113,7 +124,7 @@ $( singletons
         = Initial
         | PlacingCards
         | Betting
-        | Finished
+        | GameOver
         | ResolvingBet
         deriving stock (Eq, Show, Enum, Bounded)
 
@@ -121,8 +132,7 @@ $( singletons
       skullsTopology = Topology [ (Initial,      [PlacingCards])
                                 , (PlacingCards, [Betting])
                                 , (Betting,      [ResolvingBet])
-                                , (ResolvingBet, [Finished])
-                                , (Finished,     [PlacingCards])
+                                , (ResolvingBet, [GameOver, PlacingCards])
                                 ]
       |]
  )
@@ -132,6 +142,7 @@ deriving via AllVertices SkullsVertex instance RenderableVertices SkullsVertex
 
 -- * State
 
+
 data StateData = StateData
   { currentPlayer :: PlayerId
   , playerStacks  :: Map PlayerId [Card]
@@ -139,9 +150,44 @@ data StateData = StateData
   , totalPlayers  :: PlayerCount
   }
 
+countWins :: PlayerId -> StateData -> Int
+countWins playerId stateData =
+  case Map.lookup playerId stateData.winCounts of
+    Nothing -> 0
+    Just n -> n
+
+recordWin :: PlayerId -> StateData -> StateData
+recordWin playerId stateData =
+  stateData { winCounts = Map.insertWith (+) playerId 1 stateData.winCounts }
+
+advancePlayer :: StateData -> StateData
+advancePlayer stateData@StateData{currentPlayer, totalPlayers} =
+  stateData { currentPlayer = nextPlayer totalPlayers currentPlayer }
+
 totalCardsPlayed :: StateData -> Int
 totalCardsPlayed StateData{playerStacks} =
   Map.foldl (\len a -> len + length a) 0 playerStacks
+
+-- | Take n cards from the entry for the specific player. If we found a skull,
+-- just fail with `HitSkull`.
+takeNCardsFrom :: Int -> PlayerId -> StateData -> Either HitSkull StateData
+takeNCardsFrom n playerId stateData =
+  if anySkulls
+     then Left HitSkull
+     else Right newStateData
+  where
+    Just cards   = Map.lookup playerId stateData.playerStacks
+    anySkulls    = any isSkull (take n cards)
+    newStateData = stateData { playerStacks = Map.insert playerId (drop n cards) stateData.playerStacks }
+
+countStackOfPlayer :: PlayerId -> StateData -> Int
+countStackOfPlayer playerId stateData =
+  case Map.lookup playerId stateData.playerStacks of
+    Nothing -> 0
+    Just xs -> length xs
+
+
+data HitSkull = HitSkull
 
 data BetStateData = BetStateData
   { highestBet  :: BetData
@@ -157,19 +203,20 @@ bettingFinished betStateData stateData =
       bets   = Map.foldl (+) 0 counts
 
 data ResolvingBetStateData = ResolvingBetStateData
-  { betToMatch :: BetData
+  { flowersToPickUp :: Int
   , currentFlowersPickedUp :: Int
+  , playerId :: PlayerId
   }
 
 pickedUpEnough :: ResolvingBetStateData -> Bool
-pickedUpEnough state = state.betToMatch.flowers == state.currentFlowersPickedUp
+pickedUpEnough state = state.flowersToPickUp == state.currentFlowersPickedUp
 
 data SkullsState (vertex :: SkullsVertex) where
   SkullsInitialState      :: SkullsState Initial
   SkullsPlacingCardsState :: StateData -> SkullsState PlacingCards
   SkullsBettingSate       :: BetStateData -> StateData -> SkullsState Betting
   SkullsResolvingBet      :: ResolvingBetStateData -> StateData -> SkullsState ResolvingBet
-  SkullsFinishedState     :: StateData -> SkullsState Finished
+  SkullsGameOverState     :: PlayerId -> SkullsState GameOver
 
 data GameError
   -- ** Starting
@@ -184,6 +231,9 @@ data GameError
   | BetMustBeHigher
   | CantPassNow
   | BetTooLarge
+
+  -- ** Resolving a bet
+  | PickedUpSkull
 
   -- ** Generic
   | NotYourTurn
@@ -242,15 +292,29 @@ decideSkulls command state = case (state, command) of
 
   -- ** Resolving a bet. Who won?!
   -- TODO: Implement
-  (SkullsResolvingBet betToWin stateData, ResolveBet)
-    | otherwise -> undefined
+  -- (SkullsResolvingBet betToWin stateData, ResolveBet)
+  --   | otherwise -> undefined
+
+  (SkullsResolvingBet betToWin stateData, PickUpMyStack)
+    | stateData.currentPlayer /= betToWin.playerId -> Left NotYourTurn
+    | otherwise ->
+        let myCards = countStackOfPlayer stateData.currentPlayer stateData
+            -- The maximum we can take from my deck is the number of cards I have.
+            toTake  = min betToWin.flowersToPickUp myCards
+        in case takeNCardsFrom toTake stateData.currentPlayer stateData of
+              Right _ ->
+                if toTake <= myCards
+                  -- If we don't need to take more; we're done! We win the round.
+                  then Right $ WonRound
+                  -- If we do, keep picking up.
+                  else Right $ PickedUp toTake
+              Left _  -> Right FailedBet
 
   (SkullsResolvingBet betToWin stateData, PickUpFrom playerId)
     | otherwise -> undefined
 
   -- ** Bookkeeping
-  (SkullsFinishedState {}, _) -> Left GameIsOver
-
+  -- (SkullsFinishedState {}, _) -> Left GameIsOver
 
 -- | Perfoms state transitions.
 evolveSkulls
@@ -267,7 +331,7 @@ evolveSkulls state eitherErrorEvent = case eitherErrorEvent of
       initialResult initialData
 
     -- ** Place a card.
-    -- i.e. update the cards the player has and move to the next player.
+    -- i.e. update the cards the player has and move to the next player.SkullsInitialState
     (SkullsPlacingCardsState stateData, CardPlayed turnData) ->
       let newStacks = insertWith (++) (turnData.playerId) [turnData.card] (stateData.playerStacks)
         in EvolutionResult $ SkullsPlacingCardsState $
@@ -284,23 +348,26 @@ evolveSkulls state eitherErrorEvent = case eitherErrorEvent of
         (advancePlayer stateData)
 
     -- ** Someone raised a bet.
-    -- throw away the last highest bet, and optionally go into bet resolution,
+    -- Throw away the last highest bet, and optionally go into bet resolution,
     -- if everyone has passed.
     (SkullsBettingSate betStateData stateData, BetMade newBet) ->
       if bettingFinished betStateData stateData
           then EvolutionResult $ SkullsResolvingBet
             (ResolvingBetStateData
-              { betToMatch = newBet
+              { flowersToPickUp = newBet.flowers
               , currentFlowersPickedUp = 0
+              -- TODO: Is this right? I think so.
+              , playerId = (advancePlayer stateData).currentPlayer
               })
             (advancePlayer stateData)
           else EvolutionResult $ SkullsBettingSate betStateData (advancePlayer stateData)
 
-    -- (SkullsResolveBet betToWin
-
-advancePlayer :: StateData -> StateData
-advancePlayer stateData@StateData{currentPlayer, totalPlayers} =
-  stateData { currentPlayer = nextPlayer totalPlayers currentPlayer }
+    (SkullsResolvingBet betStateData stateData, WonRound) ->
+      let wins = countWins betStateData.playerId stateData
+       in if wins < 2
+             then EvolutionResult $ SkullsPlacingCardsState (recordWin betStateData.playerId stateData)
+             -- They won!
+             else EvolutionResult $ SkullsGameOverState betStateData.playerId
 
 initialResult
   :: (AllowedTransition SkullsTopology initialVertex PlacingCards)
