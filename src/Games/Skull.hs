@@ -23,12 +23,19 @@ module Games.Skull where
 
 import "base" Prelude hiding (init, reverse, id)
 import "containers" Data.Map (Map, insertWith)
+import "containers" Data.Map qualified as Map
 import "crem" Crem.BaseMachine (InitialState (..))
 import "crem" Crem.Decider (Decider (..), EvolutionResult (..))
 import "crem" Crem.Render.RenderableVertices (AllVertices (..), RenderableVertices)
 import "crem" Crem.Topology
 import "singletons-base" Data.Singletons.Base.TH
 
+-- TODO: Tidyup the semantics around betting.
+--
+--  - [ ] Make sure we're transitioning the player at each step (either a bet
+--        or placing a card.)
+--  - [ ] Maybe unify the check for `currentPlayer` so it's at the top and
+--        once, instead of all the same.
 
 -- * Domain
 
@@ -51,7 +58,7 @@ newtype PlayerCount = PlayerCount Int
 
 nextPlayer :: PlayerCount -> PlayerId -> PlayerId
 nextPlayer (PlayerCount count) (PlayerId i)
-  = PlayerId $ i + 1 `mod` count
+  = PlayerId $ (i + 1 `mod` count) + 1
 
 -- * Commands and events
 
@@ -69,10 +76,14 @@ data TurnData = TurnData
   }
   deriving stock (Eq, Show)
 
--- TODO: Model someone being allowed to skip making a bet.
 data BetData = BetData
   { flowers :: Int
   , playerId :: PlayerId
+  }
+  deriving stock (Eq, Show)
+
+data PassData = PassData
+  { playerId :: PlayerId
   }
   deriving stock (Eq, Show)
 
@@ -80,12 +91,14 @@ data Command
   = StartGame InitialData
   | PlayCard TurnData
   | MakeBet BetData
+  | PassBet PassData
   deriving stock (Show)
 
 data Event
   = GameStarted InitialData
   | CardPlayed  TurnData
   | BetMade     BetData
+  | BetPassed
 
 
 -- * Topology
@@ -97,12 +110,14 @@ $( singletons
         | PlacingCards
         | Betting
         | Finished
+        | ResolveBet
         deriving stock (Eq, Show, Enum, Bounded)
 
       skullsTopology :: Topology SkullsVertex
       skullsTopology = Topology [ (Initial,      [PlacingCards])
                                 , (PlacingCards, [Betting])
-                                , (Betting,      [Betting, PlacingCards, Finished])
+                                , (Betting,      [ResolveBet])
+                                , (ResolveBet,   [PlacingCards, Finished])
                                 ]
       |]
  )
@@ -113,30 +128,46 @@ deriving via AllVertices SkullsVertex instance RenderableVertices SkullsVertex
 -- * State
 
 data StateData = StateData
-  { currentPlayer :: PlayerId
-  , playerStacks  :: Map PlayerId [Card]
-  , winCounts     :: Map PlayerId Int
-  , totalPlayers  :: PlayerCount
+  { currentPlayer     :: PlayerId
+  , playerStacks      :: Map PlayerId [Card]
+  , winCounts         :: Map PlayerId Int
+  , totalPlayers      :: PlayerCount
   }
 
+totalCardsPlayed :: StateData -> Int
+totalCardsPlayed StateData{playerStacks} =
+  Map.foldl (\len a -> len + length a) 0 playerStacks
+
+-- TODO: Implement
+lastPlayerToBet :: StateData -> Bool
+lastPlayerToBet StateData{currentPlayer = PlayerId p, totalPlayers = PlayerCount n} =
+  undefined
 
 data SkullsState (vertex :: SkullsVertex) where
   SkullsInitialState      :: SkullsState Initial
   SkullsPlacingCardsState :: StateData -> SkullsState PlacingCards
   SkullsBettingSate       :: BetData -> StateData -> SkullsState Betting
+  SkullsResolveBet        :: BetData -> StateData -> SkullsState ResolveBet
   SkullsFinishedState     :: StateData -> SkullsState Finished
 
-
 data GameError
+  -- Starting
   = TooFewPlayers
   | GameAlreadyStarted
+  --
+  -- Placing cards
   | GameNotStarted
   | NotYourTurn
   | CantPlaceWhileBetting
-  | GameIsOver
+  --
+  -- Betting
   | BetMustBeHigher
+  | CantPassNow
+  | BetTooLarge
+  --
+  -- Generic
+  | GameIsOver
   deriving stock (Eq, Show)
-
 
 -- * Machine
 
@@ -146,84 +177,98 @@ decider
 decider initialState =
   Decider
     { deciderInitialState = initialState
-    , decide = decide
-    , evolve = evolve
+    , decide = decideSkulls
+    , evolve = evolveSkulls
     }
- where
-  -- | Decides the details of which events can trigger state transitions.
-  decide :: Command -> SkullsState vertex -> Either GameError Event
-  decide command state
-    = case (state, command) of
-        -- ** Starting a game
-        (SkullsInitialState, StartGame initialData)
-          | players initialData < PlayerCount 2 -> Left TooFewPlayers
-          | otherwise ->
-              Right $
-                GameStarted
-                  initialData
-
-        (SkullsInitialState,         _)           -> Left GameNotStarted
-        (SkullsPlacingCardsState {}, StartGame _) -> Left GameAlreadyStarted
-        (SkullsBettingSate {},       StartGame _) -> Left GameAlreadyStarted
-
-        -- ** Playing a card
-        (SkullsPlacingCardsState stateData, PlayCard turnData)
-          | stateData.currentPlayer /= turnData.playerId -> Left NotYourTurn
-          | otherwise -> Right $ CardPlayed turnData
-
-        (SkullsBettingSate {}, PlayCard _) -> Left CantPlaceWhileBetting
 
 
-        -- ** Making a bet
-        (SkullsPlacingCardsState _, MakeBet betData) ->
-          Right $ BetMade betData
+-- | Decides the details of which events can trigger state transitions.
+decideSkulls :: Command -> SkullsState vertex -> Either GameError Event
+decideSkulls command state = case (state, command) of
+  -- ** Starting a game
+  (SkullsInitialState, StartGame initialData)
+    | initialData.players < PlayerCount 2 -> Left TooFewPlayers
+    | otherwise -> Right $ GameStarted initialData
 
-        (SkullsBettingSate existingBet _, MakeBet newBet)
-          | flowers newBet > flowers existingBet -> Right $ BetMade newBet
-          | otherwise -> Left BetMustBeHigher
+  (SkullsInitialState,         _)           -> Left GameNotStarted
+  (SkullsPlacingCardsState {}, StartGame _) -> Left GameAlreadyStarted
+  (SkullsBettingSate {},       StartGame _) -> Left GameAlreadyStarted
+
+  -- ** Playing a card
+  (SkullsPlacingCardsState stateData, PlayCard turnData)
+    | stateData.currentPlayer /= turnData.playerId -> Left NotYourTurn
+    | otherwise -> Right $ CardPlayed turnData
+
+  (SkullsBettingSate {}, PlayCard _) -> Left CantPlaceWhileBetting
+
+  (SkullsPlacingCardsState _, PassBet _) ->
+    Left CantPassNow
+
+  -- ** Making a bet
+  (SkullsPlacingCardsState stateData, MakeBet bet)
+    | stateData.currentPlayer /= bet.playerId -> Left NotYourTurn
+    | bet.flowers <= totalCardsPlayed stateData -> Right $ BetMade bet
+    | otherwise -> Left $ BetTooLarge
+
+  (SkullsBettingSate highestBet stateData, MakeBet newBet)
+    | stateData.currentPlayer /= newBet.playerId -> Left NotYourTurn
+    | newBet.flowers <= highestBet.flowers -> Left BetMustBeHigher
+    | otherwise -> Right $ BetMade newBet
+
+  (SkullsBettingSate _ stateData, PassBet newBet)
+    | stateData.currentPlayer /= newBet.playerId -> Left NotYourTurn
+    | otherwise -> Right $ BetPassed
+
+  -- ** Bookkeeping
+  (SkullsFinishedState {}, _) -> Left GameIsOver
 
 
-        -- ** Bookkeeping
-        (SkullsFinishedState {}, _) -> Left GameIsOver
+-- | Perfoms state transitions.
+evolveSkulls
+  :: SkullsState vertex
+  -> Either GameError Event
+  -> EvolutionResult SkullsTopology SkullsState vertex (Either GameError Event)
+evolveSkulls state eitherErrorEvent
+  = case eitherErrorEvent of
+      -- Error? Nothing changes.
+      Left _ -> EvolutionResult state
+      -- Otherwise, we can do something
+      Right event -> case (state, event) of
+        (SkullsInitialState, GameStarted initialData) ->
+          initialResult initialData
 
-  -- | Perfoms state transitions.
-  evolve
-    :: SkullsState vertex
-    -> Either GameError Event
-    -> EvolutionResult SkullsTopology SkullsState vertex (Either GameError Event)
-  evolve state eitherErrorEvent
-    = case eitherErrorEvent of
-        -- Error? Nothing changes.
-        Left _ -> EvolutionResult state
-        -- Otherwise, we can do something
-        Right event -> case (state, event) of
-          (SkullsInitialState, GameStarted initialData) ->
-            initialResult initialData
+        -- Place a card; i.e. update the cards the player has and move to
+        -- the next player.
+        (SkullsPlacingCardsState stateData, CardPlayed turnData) ->
+          let newStacks = insertWith (++) (turnData.playerId) [turnData.card] (stateData.playerStacks)
+            in EvolutionResult $ SkullsPlacingCardsState $
+              (advancePlayer stateData) { playerStacks = newStacks }
 
-          -- Place a card; i.e. update the cards the player has and move to
-          -- the next player.
-          (SkullsPlacingCardsState stateData, CardPlayed turnData) ->
-            let newStacks = insertWith (++) (turnData.playerId) [turnData.card] (stateData.playerStacks)
-             in EvolutionResult $ SkullsPlacingCardsState $
-                 StateData { currentPlayer = nextPlayer (stateData.totalPlayers) (turnData.playerId)
-                           , playerStacks = newStacks
-                           , winCounts = stateData.winCounts
-                           , totalPlayers = stateData.totalPlayers
-                           }
+        -- Record the first bet, go into the betting state.
+        (SkullsPlacingCardsState stateData, BetMade betData) ->
+          EvolutionResult $ SkullsBettingSate betData (advancePlayer stateData)
 
-          -- Make a bet.
+        -- Someone raised a bet; throw away the last highest bet, and
+        -- optionally go into bet resolution, if we last player played.
+        (SkullsBettingSate _ stateData, BetMade newBet) ->
+          if lastPlayerToBet stateData
+              then EvolutionResult $ SkullsResolveBet  newBet (advancePlayer stateData)
+              else EvolutionResult $ SkullsBettingSate newBet (advancePlayer stateData)
 
+advancePlayer :: StateData -> StateData
+advancePlayer stateData@StateData{currentPlayer, totalPlayers} =
+  stateData { currentPlayer = nextPlayer totalPlayers currentPlayer }
 
-  initialResult
-    :: (AllowedTransition SkullsTopology initialVertex PlacingCards)
-    => InitialData
-    -> EvolutionResult SkullsTopology SkullsState initialVertex (Either GameError Event)
-  initialResult initialData =
-    EvolutionResult $
-      SkullsPlacingCardsState $
-        StateData
-          { currentPlayer = initialData.startingPlayer
-          , playerStacks  = mempty
-          , totalPlayers  = initialData.players
-          , winCounts     = mempty
-          }
+initialResult
+  :: (AllowedTransition SkullsTopology initialVertex PlacingCards)
+  => InitialData
+  -> EvolutionResult SkullsTopology SkullsState initialVertex (Either GameError Event)
+initialResult initialData =
+  EvolutionResult $
+    SkullsPlacingCardsState $
+      StateData
+        { currentPlayer     = initialData.startingPlayer
+        , totalPlayers      = initialData.players
+        , playerStacks      = mempty
+        , winCounts         = mempty
+        }
