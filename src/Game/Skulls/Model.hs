@@ -27,7 +27,7 @@ import "base" Data.Function ((&))
 import "base" Data.Functor.Identity (Identity)
 import "containers" Data.Map (Map, insertWith)
 import "containers" Data.Map qualified as Map
-import "crem" Crem.BaseMachine (InitialState (..), BaseMachine, BaseMachineT(..), ActionResult(..))
+import "crem" Crem.BaseMachine (InitialState (..))
 import "crem" Crem.Decider (Decider (..), deciderMachine, EvolutionResult (..))
 import "crem" Crem.Render.Render
 import "crem" Crem.Render.RenderableVertices (AllVertices (..), RenderableVertices)
@@ -36,6 +36,8 @@ import "crem" Crem.Topology
 import "singletons-base" Data.Singletons.Base.TH
 import "text" Data.Text (unpack)
 import "extra" Data.Tuple.Extra ((&&&))
+import "aeson" Data.Aeson
+import "base" GHC.Generics (Generic)
 
 -- TODO:
 --
@@ -55,12 +57,14 @@ data Suit
   | Orange
   | Pink
   | Black
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 data Card
   = Flower Suit
   | Skull  Suit
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 maxFlowers :: Int
 maxFlowers = 4
@@ -73,10 +77,14 @@ isSkull (Skull _)  = True
 isSkull (Flower _) = False
 
 newtype PlayerId = PlayerId Int
+  deriving stock (Generic)
   deriving newtype (Eq, Show, Num, Ord)
+  deriving anyclass (ToJSON, FromJSON, ToJSONKey, FromJSONKey)
 
 newtype PlayerCount = PlayerCount Int
+  deriving stock (Generic)
   deriving newtype (Eq, Show, Num, Ord)
+  deriving anyclass (ToJSON, FromJSON)
 
 -- | Players start counting at zero because we use mod to keep track of player
 -- ids
@@ -94,25 +102,29 @@ data InitialData = InitialData
   { players :: PlayerCount
   , startingPlayer :: PlayerId
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 -- | This is what happens in a turn.
 data TurnData = TurnData
   { playerId :: PlayerId
   , card :: Card
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 data BetData = BetData
   { flowers :: Int
   , playerId :: PlayerId
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 data PassData = PassData
   { playerId :: PlayerId
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 data Command
   = StartGame InitialData
@@ -123,7 +135,8 @@ data Command
   -- * Resolving a bet
   | PickUpMyStack
   | PickUpFrom PlayerId
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 data Event
   = GameStarted InitialData
@@ -132,8 +145,10 @@ data Event
   | BetPassed
   | PickedUp    Int
   | WonRound
+  | WonGame
   | FailedBet -- It's okay to fail a bet actually.
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 
 -- * Topology
@@ -162,7 +177,6 @@ deriving via AllVertices SkullsVertex instance RenderableVertices SkullsVertex
 
 -- * State
 
-
 data StateData = StateData
   { currentPlayer :: PlayerId
   , playerStacks  :: Map PlayerId [Card]
@@ -170,7 +184,8 @@ data StateData = StateData
   , lossCounts    :: Map PlayerId Int
   , totalPlayers  :: PlayerCount
   }
-  deriving (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 countWins :: PlayerId -> StateData -> Int
 countWins playerId stateData =
@@ -219,13 +234,15 @@ countStackOfPlayer playerId stateData =
     Just xs -> length xs
 
 data HitSkull = HitSkull
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 data BetStateData = BetStateData
   { highestBet  :: BetData
-  -- | A player has made a bet if this is Just.
   , playersBets :: Map PlayerId (Maybe BetData)
   }
-  deriving (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 bettingFinished :: BetStateData -> StateData -> Bool
 bettingFinished betStateData stateData =
@@ -239,7 +256,8 @@ data ResolvingBetStateData = ResolvingBetStateData
   , currentFlowersPickedUp :: Int
   , playerId :: PlayerId
   }
-  deriving (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 pickedUpEnough :: ResolvingBetStateData -> Bool
 pickedUpEnough state = state.flowersToPickUp == state.currentFlowersPickedUp
@@ -275,7 +293,8 @@ data GameError
   -- ** Generic
   | NotYourTurn
   | GameIsOver
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 
 -- * Machine
@@ -296,7 +315,8 @@ data StateBlob
   | BlobBettingState BetStateData StateData
   | BlobResolvingBetState ResolvingBetStateData StateData
   | BlobGameOverState PlayerId
-  deriving (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 makeStateBlob :: SkullsState vertex -> StateBlob
 makeStateBlob = \case
@@ -324,8 +344,8 @@ decideSkulls' command state = case (state, command) of
     | initialData.players < PlayerCount 2 -> Left TooFewPlayers
     | otherwise -> Right $ GameStarted initialData
 
-  (SkullsInitialState,         _)           -> Left GameNotStarted
-  (SkullsPlacingCardsState {}, StartGame _) -> Left GameAlreadyStarted
+  (SkullsInitialState,         _)            -> Left GameNotStarted
+  (SkullsPlacingCardsState {}, StartGame _)  -> Left GameAlreadyStarted
   (SkullsBettingState {},       StartGame _) -> Left GameAlreadyStarted
 
   -- ** Playing a card
@@ -386,7 +406,12 @@ attemptPickupFrom playerId flowers stateData =
         Right _ ->
           if toTake <= cards
             -- If we don't need to take more; we're done! We win the round.
-            then Right $ WonRound
+            -- Let's check if we also win the game.
+            then
+              let wins = countWins playerId stateData
+               in if wins == 2
+                     then Right WonGame
+                     else Right WonRound
             -- If we do, keep picking up.
             else Right $ PickedUp toTake
         --
@@ -450,21 +475,18 @@ evolveSkulls state eitherErrorEvent =
     (SkullsBettingState {}, _) -> EvolutionResult state
 
     -- ** Won a bet.
-    -- If you've won two; you win! Otherwise, keep playing.
     (SkullsResolvingBetState betStateData stateData, WonRound) ->
-      let wins = countWins betStateData.playerId stateData
-       in if wins < 2
-             then
-                let newState =
-                      stateData
-                        { playerStacks = mempty
-                        -- TODO: Mabe the next player changes here; it's not just the first.
-                        , currentPlayer = firstPlayer
-                        } & recordWin betStateData.playerId
-                in
-                EvolutionResult $ SkullsPlacingCardsState newState
-             -- They won!
-             else EvolutionResult $ SkullsGameOverState betStateData.playerId
+      let newState =
+            stateData
+              { playerStacks = mempty
+              -- TODO: Mabe the next player changes here; it's not just the first.
+              , currentPlayer = firstPlayer
+              } & recordWin betStateData.playerId
+       in EvolutionResult $ SkullsPlacingCardsState newState
+
+    -- If you've won two; you win! Otherwise, keep playing.
+    (SkullsResolvingBetState betStateData _, WonGame) ->
+      EvolutionResult $ SkullsGameOverState betStateData.playerId
 
     -- ** Failed a bet; just count it and go back to the start.
     (SkullsResolvingBetState betStateData stateData, FailedBet) ->

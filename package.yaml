@@ -9,6 +9,7 @@ dependencies:
   - base >= 4.15 && < 4.19
   - crem
   - singletons-base
+  - bytestring
 
 language:
   GHC2021
@@ -22,6 +23,7 @@ default-extensions:
   - LambdaCase
   - PackageImports
   - TypeFamilies
+  - OverloadedStrings
 
 ghc-options:
   # Enable every warning GHC supports
@@ -42,9 +44,25 @@ ghc-options:
 library:
   source-dirs: src
   dependencies:
+    - aeson
     - containers
     - extra
     - text
+
+executables:
+  skulls-game-server:
+    source-dirs: skulls-game-server
+    main: Main.hs
+    dependencies:
+      - aeson
+      - monadic-games-club
+      - servant
+      - servant-server
+      - servant-websockets
+      - text
+      - wai
+      - warp
+      - websockets
 
 tests:
   monadic-games-club-spec:
@@ -53,5 +71,4 @@ tests:
     dependencies:
       - monadic-games-club
       - hspec
-      # - profunctors
     build-tools: hspec-discover:hspec-discover

@@ -42,12 +42,21 @@
               watchWithGhcid
 
               (hask.ghcWithPackages (ps: with ps; [
+                aeson
+                bytestring
                 crem
                 extra
                 hspec
+                http-types
                 profunctors
+                servant
+                servant-server
+                servant-websockets
                 singletons-base
                 text
+                wai
+                warp
+                websockets
               ]))
             ];
           };

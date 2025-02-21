@@ -47,12 +47,13 @@ gameSequence =
         }
   , PlayCard $
       TurnData
-        { playerId = nextPlayer (PlayerCount 3) firstPlayer
+        { playerId = firstPlayer
+        -- { playerId = nextPlayer (PlayerCount 3) firstPlayer
         , card = Flower Blue
         }
-  , PlayCard $
-      TurnData
-        { playerId = nextPlayer (PlayerCount 3) (nextPlayer (PlayerCount 3) firstPlayer)
-        , card = Flower Orange
-        }
+  -- , PlayCard $
+  --     TurnData
+  --       { playerId = nextPlayer (PlayerCount 3) (nextPlayer (PlayerCount 3) firstPlayer)
+  --       , card = Flower Orange
+  --       }
   ]
