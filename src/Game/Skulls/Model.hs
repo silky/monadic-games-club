@@ -159,8 +159,8 @@ $( singletons
         = Initial
         | PlacingCards
         | Betting
-        | GameOver
         | ResolvingBet
+        | GameOver
         deriving stock (Eq, Show, Enum, Bounded)
 
       skullsTopology :: Topology SkullsVertex
@@ -189,9 +189,7 @@ data StateData = StateData
 
 countWins :: PlayerId -> StateData -> Int
 countWins playerId stateData =
-  case Map.lookup playerId stateData.winCounts of
-    Nothing -> 0
-    Just n -> n
+  maybe 0 id $ Map.lookup playerId stateData.winCounts
 
 playedSkull :: PlayerId -> StateData -> Bool
 playedSkull playerId stateData =
@@ -229,9 +227,7 @@ takeNCardsFrom n playerId stateData =
 
 countStackOfPlayer :: PlayerId -> StateData -> Int
 countStackOfPlayer playerId stateData =
-  case Map.lookup playerId stateData.playerStacks of
-    Nothing -> 0
-    Just xs -> length xs
+  maybe 0 length $ Map.lookup playerId stateData.playerStacks
 
 data HitSkull = HitSkull
   deriving stock (Eq, Show, Generic)
