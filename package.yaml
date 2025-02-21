@@ -7,9 +7,9 @@ extra-source-files:
 
 dependencies:
   - base >= 4.15 && < 4.19
-  - containers
   - crem
   - singletons-base
+  - bytestring
 
 language:
   GHC2021
@@ -20,8 +20,10 @@ default-extensions:
   - DeriveLift
   - DerivingStrategies
   - DerivingVia
+  - LambdaCase
   - PackageImports
   - TypeFamilies
+  - OverloadedStrings
 
 ghc-options:
   # Enable every warning GHC supports
@@ -41,3 +43,32 @@ ghc-options:
 
 library:
   source-dirs: src
+  dependencies:
+    - aeson
+    - containers
+    - extra
+    - text
+
+executables:
+  skulls-game-server:
+    source-dirs: skulls-game-server
+    main: Main.hs
+    dependencies:
+      - aeson
+      - monadic-games-club
+      - servant
+      - servant-server
+      - servant-websockets
+      - text
+      - wai
+      - warp
+      - websockets
+
+tests:
+  monadic-games-club-spec:
+    main:           Spec.hs
+    source-dirs:    spec
+    dependencies:
+      - monadic-games-club
+      - hspec
+    build-tools: hspec-discover:hspec-discover

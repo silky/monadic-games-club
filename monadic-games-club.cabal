@@ -15,7 +15,7 @@ extra-source-files:
 
 library
   exposed-modules:
-      Games.Skull
+      Game.Skulls.Model
   other-modules:
       Paths_monadic_games_club
   hs-source-dirs:
@@ -26,12 +26,81 @@ library
       DeriveLift
       DerivingStrategies
       DerivingVia
+      LambdaCase
       PackageImports
       TypeFamilies
+      OverloadedStrings
   ghc-options: -Weverything -Wno-all-missed-specialisations -Wno-implicit-prelude -Wno-missing-export-lists -Wno-missing-home-modules -Wno-missing-import-lists -Wno-missing-kind-signatures -Wno-missing-safe-haskell-mode -Wno-prepositive-qualified-module -Wno-safe -Wno-unsafe
   build-depends:
-      base >=4.15 && <4.19
+      aeson
+    , base >=4.15 && <4.19
+    , bytestring
     , containers
     , crem
+    , extra
+    , singletons-base
+    , text
+  default-language: GHC2021
+
+executable skulls-game-server
+  main-is: Main.hs
+  other-modules:
+      Paths_monadic_games_club
+  hs-source-dirs:
+      skulls-game-server
+  default-extensions:
+      DataKinds
+      DeriveAnyClass
+      DeriveLift
+      DerivingStrategies
+      DerivingVia
+      LambdaCase
+      PackageImports
+      TypeFamilies
+      OverloadedStrings
+  ghc-options: -Weverything -Wno-all-missed-specialisations -Wno-implicit-prelude -Wno-missing-export-lists -Wno-missing-home-modules -Wno-missing-import-lists -Wno-missing-kind-signatures -Wno-missing-safe-haskell-mode -Wno-prepositive-qualified-module -Wno-safe -Wno-unsafe
+  build-depends:
+      aeson
+    , base >=4.15 && <4.19
+    , bytestring
+    , crem
+    , monadic-games-club
+    , servant
+    , servant-server
+    , servant-websockets
+    , singletons-base
+    , text
+    , wai
+    , warp
+    , websockets
+  default-language: GHC2021
+
+test-suite monadic-games-club-spec
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Game.SkullsSpec
+      Paths_monadic_games_club
+  hs-source-dirs:
+      spec
+  default-extensions:
+      DataKinds
+      DeriveAnyClass
+      DeriveLift
+      DerivingStrategies
+      DerivingVia
+      LambdaCase
+      PackageImports
+      TypeFamilies
+      OverloadedStrings
+  ghc-options: -Weverything -Wno-all-missed-specialisations -Wno-implicit-prelude -Wno-missing-export-lists -Wno-missing-home-modules -Wno-missing-import-lists -Wno-missing-kind-signatures -Wno-missing-safe-haskell-mode -Wno-prepositive-qualified-module -Wno-safe -Wno-unsafe
+  build-tool-depends:
+      hspec-discover:hspec-discover
+  build-depends:
+      base >=4.15 && <4.19
+    , bytestring
+    , crem
+    , hspec
+    , monadic-games-club
     , singletons-base
   default-language: GHC2021
