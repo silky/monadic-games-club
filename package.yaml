@@ -7,7 +7,6 @@ extra-source-files:
 
 dependencies:
   - base >= 4.15 && < 4.19
-  - containers
   - crem
   - singletons-base
 
@@ -20,6 +19,7 @@ default-extensions:
   - DeriveLift
   - DerivingStrategies
   - DerivingVia
+  - LambdaCase
   - PackageImports
   - TypeFamilies
 
@@ -41,3 +41,17 @@ ghc-options:
 
 library:
   source-dirs: src
+  dependencies:
+    - containers
+    - extra
+    - text
+
+tests:
+  monadic-games-club-spec:
+    main:           Spec.hs
+    source-dirs:    spec
+    dependencies:
+      - monadic-games-club
+      - hspec
+      # - profunctors
+    build-tools: hspec-discover:hspec-discover

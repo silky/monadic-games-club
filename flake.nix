@@ -43,6 +43,9 @@
 
               (hask.ghcWithPackages (ps: with ps; [
                 crem
+                extra
+                hspec
+                profunctors
                 singletons-base
                 text
               ]))

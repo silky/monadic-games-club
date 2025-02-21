@@ -8,7 +8,7 @@
 {-# OPTIONS_GHC -Wno-unticked-promoted-constructors #-}
 {-# OPTIONS_GHC -Wno-unused-type-patterns #-}
 
-module Games.Skull where
+module Game.Skulls.Model where
 
 {-
   Skulls is a simple betting-style game.
@@ -24,17 +24,21 @@ module Games.Skull where
 -}
 
 import "base" Data.Function ((&))
+import "base" Data.Functor.Identity (Identity)
 import "containers" Data.Map (Map, insertWith)
 import "containers" Data.Map qualified as Map
-import "crem" Crem.BaseMachine (InitialState (..))
-import "crem" Crem.Decider (Decider (..), EvolutionResult (..))
+import "crem" Crem.BaseMachine (InitialState (..), BaseMachine, BaseMachineT(..), ActionResult(..))
+import "crem" Crem.Decider (Decider (..), deciderMachine, EvolutionResult (..))
+import "crem" Crem.Render.Render
 import "crem" Crem.Render.RenderableVertices (AllVertices (..), RenderableVertices)
+import "crem" Crem.StateMachine (StateMachineT (Basic))
 import "crem" Crem.Topology
 import "singletons-base" Data.Singletons.Base.TH
+import "text" Data.Text (unpack)
+import "extra" Data.Tuple.Extra ((&&&))
 
 -- TODO:
 --
---  - [ ] Make the suits do something
 --  - [ ] Test game play
 --  - [ ] Generate gameplay quickcheck and count how many times we et into
 --        each state.
@@ -74,9 +78,14 @@ newtype PlayerId = PlayerId Int
 newtype PlayerCount = PlayerCount Int
   deriving newtype (Eq, Show, Num, Ord)
 
+-- | Players start counting at zero because we use mod to keep track of player
+-- ids
+firstPlayer :: PlayerId
+firstPlayer = PlayerId 0
+
 nextPlayer :: PlayerCount -> PlayerId -> PlayerId
 nextPlayer (PlayerCount count) (PlayerId i)
-  = PlayerId $ (i + 1 `mod` count) + 1
+  = PlayerId $ (i + 1 `mod` count)
 
 -- * Commands and events
 
@@ -114,7 +123,7 @@ data Command
   -- * Resolving a bet
   | PickUpMyStack
   | PickUpFrom PlayerId
-  deriving stock (Show)
+  deriving stock (Eq, Show)
 
 data Event
   = GameStarted InitialData
@@ -124,6 +133,7 @@ data Event
   | PickedUp    Int
   | WonRound
   | FailedBet -- It's okay to fail a bet actually.
+  deriving stock (Eq, Show)
 
 
 -- * Topology
@@ -160,6 +170,7 @@ data StateData = StateData
   , lossCounts    :: Map PlayerId Int
   , totalPlayers  :: PlayerCount
   }
+  deriving (Eq, Show)
 
 countWins :: PlayerId -> StateData -> Int
 countWins playerId stateData =
@@ -214,6 +225,7 @@ data BetStateData = BetStateData
   -- | A player has made a bet if this is Just.
   , playersBets :: Map PlayerId (Maybe BetData)
   }
+  deriving (Eq, Show)
 
 bettingFinished :: BetStateData -> StateData -> Bool
 bettingFinished betStateData stateData =
@@ -227,6 +239,7 @@ data ResolvingBetStateData = ResolvingBetStateData
   , currentFlowersPickedUp :: Int
   , playerId :: PlayerId
   }
+  deriving (Eq, Show)
 
 pickedUpEnough :: ResolvingBetStateData -> Bool
 pickedUpEnough state = state.flowersToPickUp == state.currentFlowersPickedUp
@@ -234,8 +247,8 @@ pickedUpEnough state = state.flowersToPickUp == state.currentFlowersPickedUp
 data SkullsState (vertex :: SkullsVertex) where
   SkullsInitialState      :: SkullsState Initial
   SkullsPlacingCardsState :: StateData -> SkullsState PlacingCards
-  SkullsBettingSate       :: BetStateData -> StateData -> SkullsState Betting
-  SkullsResolvingBet      :: ResolvingBetStateData -> StateData -> SkullsState ResolvingBet
+  SkullsBettingState      :: BetStateData -> StateData -> SkullsState Betting
+  SkullsResolvingBetState :: ResolvingBetStateData -> StateData -> SkullsState ResolvingBet
   SkullsGameOverState     :: PlayerId -> SkullsState GameOver
 
 data GameError
@@ -269,7 +282,7 @@ data GameError
 
 decider
   :: InitialState SkullsState
-  -> Decider SkullsTopology Command (Either GameError Event)
+  -> Decider SkullsTopology Command GameResult
 decider initialState =
   Decider
     { deciderInitialState = initialState
@@ -277,10 +290,35 @@ decider initialState =
     , evolve = evolveSkulls
     }
 
+data StateBlob
+  = BlobInitialState
+  | BlobPlacingCardsState StateData
+  | BlobBettingState BetStateData StateData
+  | BlobResolvingBetState ResolvingBetStateData StateData
+  | BlobGameOverState PlayerId
+  deriving (Eq, Show)
+
+makeStateBlob :: SkullsState vertex -> StateBlob
+makeStateBlob = \case
+  SkullsInitialState -> BlobInitialState
+  SkullsPlacingCardsState s -> BlobPlacingCardsState s
+  SkullsBettingState b s -> BlobBettingState b s
+  SkullsResolvingBetState r s -> BlobResolvingBetState r s
+  SkullsGameOverState p -> BlobGameOverState p
+
+type GameResult = Either GameError (Event, StateBlob)
+
+decideSkulls :: Command -> SkullsState vertex -> GameResult
+decideSkulls command = g . (decideSkulls' command &&& makeStateBlob)
+  where
+    g :: (Either a b, c) -> Either a (b, c)
+    g = \case
+      (Left l, _) -> Left l
+      (Right b, c) -> Right (b, c)
 
 -- | Decides the details of which events can trigger state transitions.
-decideSkulls :: Command -> SkullsState vertex -> Either GameError Event
-decideSkulls command state = case (state, command) of
+decideSkulls' :: Command -> SkullsState vertex -> Either GameError Event
+decideSkulls' command state = case (state, command) of
   -- ** Starting a game
   (SkullsInitialState, StartGame initialData)
     | initialData.players < PlayerCount 2 -> Left TooFewPlayers
@@ -288,7 +326,7 @@ decideSkulls command state = case (state, command) of
 
   (SkullsInitialState,         _)           -> Left GameNotStarted
   (SkullsPlacingCardsState {}, StartGame _) -> Left GameAlreadyStarted
-  (SkullsBettingSate {},       StartGame _) -> Left GameAlreadyStarted
+  (SkullsBettingState {},       StartGame _) -> Left GameAlreadyStarted
 
   -- ** Playing a card
   (SkullsPlacingCardsState stateData, PlayCard turnData)
@@ -299,7 +337,7 @@ decideSkulls command state = case (state, command) of
         -> Left PlayedYourSkull
     | otherwise -> Right $ CardPlayed turnData
 
-  (SkullsBettingSate {}, PlayCard _) -> Left CantPlaceWhileBetting
+  (SkullsBettingState {}, PlayCard _) -> Left CantPlaceWhileBetting
 
   (SkullsPlacingCardsState _, PassBet _) -> Left CantPassNow
 
@@ -309,20 +347,20 @@ decideSkulls command state = case (state, command) of
     | bet.flowers <= totalCardsPlayed stateData -> Right $ BetMade bet
     | otherwise -> Left $ BetTooLarge
 
-  (SkullsBettingSate (BetStateData{highestBet}) stateData, MakeBet newBet)
+  (SkullsBettingState (BetStateData{highestBet}) stateData, MakeBet newBet)
     | stateData.currentPlayer /= newBet.playerId -> Left NotYourTurn
     | newBet.flowers <= highestBet.flowers -> Left BetMustBeHigher
     | otherwise -> Right $ BetMade newBet
 
-  (SkullsBettingSate _ stateData, PassBet newBet)
+  (SkullsBettingState _ stateData, PassBet newBet)
     | stateData.currentPlayer /= newBet.playerId -> Left NotYourTurn
     | otherwise -> Right $ BetPassed
 
-  (SkullsResolvingBet betToWin stateData, PickUpMyStack)
+  (SkullsResolvingBetState betToWin stateData, PickUpMyStack)
     | stateData.currentPlayer /= betToWin.playerId -> Left NotYourTurn
     | otherwise -> attemptPickupFrom stateData.currentPlayer betToWin.flowersToPickUp stateData
 
-  (SkullsResolvingBet betToWin stateData, PickUpFrom playerId)
+  (SkullsResolvingBetState betToWin stateData, PickUpFrom playerId)
     | stateData.currentPlayer /= betToWin.playerId -> Left NotYourTurn
     | otherwise -> attemptPickupFrom playerId betToWin.flowersToPickUp stateData
 
@@ -335,9 +373,7 @@ decideSkulls command state = case (state, command) of
   (_, PickUpFrom {}) -> Left CantPickUpNow
 
   -- If you're resolving bet, you can only be picking up.
-  (SkullsResolvingBet {}, _) -> Left CanOnlyResolveBetNow
-
-
+  (SkullsResolvingBetState {}, _) -> Left CanOnlyResolveBetNow
 
 attemptPickupFrom :: PlayerId -> Int -> StateData -> Either GameError Event
 attemptPickupFrom playerId flowers stateData =
@@ -360,15 +396,15 @@ attemptPickupFrom playerId flowers stateData =
 -- | Perfoms state transitions.
 evolveSkulls
   :: SkullsState vertex
-  -> Either GameError Event
-  -> EvolutionResult SkullsTopology SkullsState vertex (Either GameError Event)
+  -> GameResult
+  -> EvolutionResult SkullsTopology SkullsState vertex GameResult
 evolveSkulls state eitherErrorEvent =
   case eitherErrorEvent of
   -- Error? Nothing changes.
   Left _ -> EvolutionResult state
 
   -- Otherwise, we can do something
-  Right event -> case (state, event) of
+  Right (event, _) -> case (state, event) of
     (SkullsInitialState, GameStarted initialData) ->
       initialResult initialData
 
@@ -384,7 +420,7 @@ evolveSkulls state eitherErrorEvent =
 
     -- Record the first bet, go into the betting state.
     (SkullsPlacingCardsState stateData, BetMade betData) ->
-      EvolutionResult $ SkullsBettingSate
+      EvolutionResult $ SkullsBettingState
         (BetStateData
           { highestBet = betData
           , playersBets = Map.singleton stateData.currentPlayer (Just betData)
@@ -397,32 +433,33 @@ evolveSkulls state eitherErrorEvent =
     -- ** Someone raised a bet.
     -- Throw away the last highest bet, and optionally go into bet resolution,
     -- if everyone has passed.
-    (SkullsBettingSate betStateData stateData, BetMade newBet) ->
+    (SkullsBettingState betStateData stateData, BetMade newBet) ->
       -- In betting, we still move around Clockwise
       let newState = advancePlayer stateData
       in if bettingFinished betStateData stateData
-            then EvolutionResult $ SkullsResolvingBet
+            then EvolutionResult $ SkullsResolvingBetState
                   (ResolvingBetStateData
                     { flowersToPickUp = newBet.flowers
                     , currentFlowersPickedUp = 0
                     , playerId = newBet.playerId -- The player who made the highest bet
                     })
                   newState
-           else EvolutionResult $ SkullsBettingSate betStateData newState
+           else EvolutionResult $ SkullsBettingState betStateData newState
 
 
-    (SkullsBettingSate {}, _) -> EvolutionResult state
+    (SkullsBettingState {}, _) -> EvolutionResult state
 
     -- ** Won a bet.
     -- If you've won two; you win! Otherwise, keep playing.
-    (SkullsResolvingBet betStateData stateData, WonRound) ->
+    (SkullsResolvingBetState betStateData stateData, WonRound) ->
       let wins = countWins betStateData.playerId stateData
        in if wins < 2
              then
                 let newState =
                       stateData
                         { playerStacks = mempty
-                        , currentPlayer = PlayerId 0
+                        -- TODO: Mabe the next player changes here; it's not just the first.
+                        , currentPlayer = firstPlayer
                         } & recordWin betStateData.playerId
                 in
                 EvolutionResult $ SkullsPlacingCardsState newState
@@ -430,21 +467,22 @@ evolveSkulls state eitherErrorEvent =
              else EvolutionResult $ SkullsGameOverState betStateData.playerId
 
     -- ** Failed a bet; just count it and go back to the start.
-    (SkullsResolvingBet betStateData stateData, FailedBet) ->
+    (SkullsResolvingBetState betStateData stateData, FailedBet) ->
       let newState =
             stateData
               { playerStacks = mempty
-              , currentPlayer = PlayerId 0
+                -- TODO: Mabe the next player changes here; it's not just the first.
+              , currentPlayer = firstPlayer
               } & recordLoss betStateData.playerId
       in EvolutionResult $ SkullsPlacingCardsState newState
 
-    (SkullsResolvingBet {}, _) -> EvolutionResult state
+    (SkullsResolvingBetState {}, _) -> EvolutionResult state
 
 
 initialResult
   :: (AllowedTransition SkullsTopology initialVertex PlacingCards)
   => InitialData
-  -> EvolutionResult SkullsTopology SkullsState initialVertex (Either GameError Event)
+  -> EvolutionResult SkullsTopology SkullsState initialVertex GameResult
 initialResult initialData =
   EvolutionResult $
     SkullsPlacingCardsState $
@@ -455,3 +493,36 @@ initialResult initialData =
         , winCounts     = mempty
         , lossCounts    = mempty
         }
+
+
+-- * Rendering
+
+printMermaid :: IO ()
+printMermaid = putStrLn $ unpack t
+    where
+      Mermaid t = renderUntypedGraph (machineAsGraph m)
+      m :: StateMachineT Identity Command GameResult
+      m = Basic $ deciderMachine (decider $ InitialState SkullsInitialState)
+
+
+-- data FullStateData
+--   = InitialThing
+
+-- projection :: StateMachineT IO Command ()
+-- projection = Basic $ fullStateProjection
+
+-- fullStateProjection :: BaseMachineT IO SkullsTopology Command ()
+-- fullStateProjection = BaseMachineT
+--   { initialState = InitialState SkullsInitialState
+--   , action = action
+--   }
+--     where
+--       action :: SkullsState v -> Command -> ActionResult IO SkullsTopology SkullsState v ()
+--       action state input =
+--            case state of
+--              SkullsInitialState -> ActionResult $ do
+--                putStrLn "X"
+--                pure ((), state)
+
+-- Note: The above doesn't work, because it only takes the _input_; _not_ the
+-- internal state.
