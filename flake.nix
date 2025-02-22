@@ -46,6 +46,7 @@
                 aeson
                 bytestring
                 crem
+                elm-street
                 extra
                 hspec
                 http-types

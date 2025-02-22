@@ -63,5 +63,5 @@ app = do
 
 main :: IO ()
 main = do
-  putStrLn "Listening on 8000"
-  Warp.run 8000 app
+  putStrLn "Listening on 8008"
+  Warp.run 8008 app

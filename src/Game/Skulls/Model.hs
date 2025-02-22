@@ -38,6 +38,8 @@ import "text" Data.Text (unpack)
 import "extra" Data.Tuple.Extra ((&&&))
 import "aeson" Data.Aeson
 import "base" GHC.Generics (Generic)
+import "elm-street" Elm (Elm, ElmStreet (..), ElmDefinition(DefPrim), ElmPrim(ElmList))
+import "elm-street" Elm.Generic (toElmDefinition, elmRef)
 
 -- TODO:
 --
@@ -58,13 +60,13 @@ data Suit
   | Pink
   | Black
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet Suit
 
 data Card
   = Flower Suit
   | Skull  Suit
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet Card
 
 maxFlowers :: Int
 maxFlowers = 4
@@ -79,12 +81,13 @@ isSkull (Flower _) = False
 newtype PlayerId = PlayerId Int
   deriving stock (Generic)
   deriving newtype (Eq, Show, Num, Ord)
-  deriving anyclass (ToJSON, FromJSON, ToJSONKey, FromJSONKey)
+  deriving anyclass (ToJSONKey, FromJSONKey)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet PlayerId
 
 newtype PlayerCount = PlayerCount Int
   deriving stock (Generic)
   deriving newtype (Eq, Show, Num, Ord)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet PlayerCount
 
 -- | Players start counting at zero because we use mod to keep track of player
 -- ids
@@ -99,32 +102,32 @@ nextPlayer (PlayerCount count) (PlayerId i)
 
 -- | Data to kick off a game.
 data InitialData = InitialData
-  { players :: PlayerCount
-  , startingPlayer :: PlayerId
+  { idPlayers :: PlayerCount
+  , idStartingPlayer :: PlayerId
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet InitialData
 
 -- | This is what happens in a turn.
 data TurnData = TurnData
-  { playerId :: PlayerId
-  , card :: Card
+  { tdPlayerId :: PlayerId
+  , tdCard :: Card
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet TurnData
 
 data BetData = BetData
-  { flowers :: Int
-  , playerId :: PlayerId
+  { bdFlowers :: Int
+  , bdPlayerId :: PlayerId
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet BetData
 
 data PassData = PassData
-  { playerId :: PlayerId
+  { pdPlayerId :: PlayerId
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet PassData
 
 data Command
   = StartGame InitialData
@@ -136,7 +139,7 @@ data Command
   | PickUpMyStack
   | PickUpFrom PlayerId
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet Command
 
 data Event
   = GameStarted InitialData
@@ -148,7 +151,7 @@ data Event
   | WonGame
   | FailedBet -- It's okay to fail a bet actually.
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet Event
 
 
 -- * Topology
@@ -177,40 +180,69 @@ deriving via AllVertices SkullsVertex instance RenderableVertices SkullsVertex
 
 -- * State
 
+-- Hacks for elm-street not supporting Maps (because Elm doesn't support
+-- them).
+instance Elm (Map PlayerId [Card]) where
+  toElmDefinition _ = DefPrim $ ElmList (elmRef @(PlayerId, [Card]))
+
+instance {-# OVERLAPPING #-} ToJSON   (Map PlayerId [Card])
+  where toJSON m = toJSON $ Map.toList m
+
+instance {-# OVERLAPPING #-} FromJSON (Map PlayerId [Card])
+  where parseJSON v = Map.fromList <$> parseJSON @[(PlayerId, [Card])] v
+
+instance Elm (Map PlayerId Int) where
+  toElmDefinition _ = DefPrim $ ElmList (elmRef @(PlayerId, Int))
+
+instance {-# OVERLAPPING #-} ToJSON   (Map PlayerId Int)
+  where toJSON m = toJSON $ Map.toList m
+
+instance {-# OVERLAPPING #-} FromJSON (Map PlayerId Int)
+  where parseJSON v = Map.fromList <$> parseJSON @[(PlayerId, Int)] v
+
+instance Elm (Map PlayerId (Maybe BetData)) where
+  toElmDefinition _ = DefPrim $ ElmList (elmRef @(PlayerId, Maybe BetData))
+
+instance {-# OVERLAPPING #-} ToJSON   (Map PlayerId (Maybe BetData))
+  where toJSON m = toJSON $ Map.toList m
+
+instance {-# OVERLAPPING #-} FromJSON (Map PlayerId (Maybe BetData))
+  where parseJSON v = Map.fromList <$> parseJSON @[(PlayerId, Maybe BetData)] v
+
 data StateData = StateData
-  { currentPlayer :: PlayerId
-  , playerStacks  :: Map PlayerId [Card]
-  , winCounts     :: Map PlayerId Int
-  , lossCounts    :: Map PlayerId Int
-  , totalPlayers  :: PlayerCount
+  { sdCurrentPlayer :: PlayerId
+  , sdPlayerStacks  :: Map PlayerId [Card]
+  , sdWinCounts     :: Map PlayerId Int
+  , sdLossCounts    :: Map PlayerId Int
+  , sdTotalPlayers  :: PlayerCount
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet StateData
 
 countWins :: PlayerId -> StateData -> Int
 countWins playerId stateData =
-  maybe 0 id $ Map.lookup playerId stateData.winCounts
+  maybe 0 id $ Map.lookup playerId stateData.sdWinCounts
 
 playedSkull :: PlayerId -> StateData -> Bool
 playedSkull playerId stateData =
-  let cards = maybe [] id (Map.lookup playerId stateData.playerStacks)
+  let cards = maybe [] id (Map.lookup playerId stateData.sdPlayerStacks)
    in any isSkull cards
 
 recordWin :: PlayerId -> StateData -> StateData
 recordWin playerId stateData =
-  stateData { winCounts = Map.insertWith (+) playerId 1 stateData.winCounts }
+  stateData { sdWinCounts = Map.insertWith (+) playerId 1 stateData.sdWinCounts }
 
 recordLoss :: PlayerId -> StateData -> StateData
 recordLoss playerId stateData =
-  stateData { lossCounts = Map.insertWith (+) playerId 1 stateData.lossCounts }
+  stateData { sdLossCounts = Map.insertWith (+) playerId 1 stateData.sdLossCounts }
 
 advancePlayer :: StateData -> StateData
-advancePlayer stateData@StateData{currentPlayer, totalPlayers} =
-  stateData { currentPlayer = nextPlayer totalPlayers currentPlayer }
+advancePlayer stateData@StateData{sdCurrentPlayer, sdTotalPlayers} =
+  stateData { sdCurrentPlayer = nextPlayer sdTotalPlayers sdCurrentPlayer }
 
 totalCardsPlayed :: StateData -> Int
-totalCardsPlayed StateData{playerStacks} =
-  Map.foldl (\len a -> len + length a) 0 playerStacks
+totalCardsPlayed StateData{sdPlayerStacks} =
+  Map.foldl (\len a -> len + length a) 0 sdPlayerStacks
 
 -- | Take n cards from the entry for the specific player. If we found a skull,
 -- just fail with `HitSkull`.
@@ -221,42 +253,42 @@ takeNCardsFrom n playerId stateData =
      else Right newStateData
   where
     -- We can just pattern match here; it can't given an error.
-    cards        = maybe [] id (Map.lookup playerId stateData.playerStacks)
+    cards        = maybe [] id (Map.lookup playerId stateData.sdPlayerStacks)
     anySkulls    = any isSkull (take n cards)
-    newStateData = stateData { playerStacks = Map.insert playerId (drop n cards) stateData.playerStacks }
+    newStateData = stateData { sdPlayerStacks = Map.insert playerId (drop n cards) stateData.sdPlayerStacks }
 
 countStackOfPlayer :: PlayerId -> StateData -> Int
 countStackOfPlayer playerId stateData =
-  maybe 0 length $ Map.lookup playerId stateData.playerStacks
+  maybe 0 length $ Map.lookup playerId stateData.sdPlayerStacks
 
 data HitSkull = HitSkull
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet HitSkull
 
 data BetStateData = BetStateData
-  { highestBet  :: BetData
-  , playersBets :: Map PlayerId (Maybe BetData)
+  { bsdHighestBet  :: BetData
+  , bsdPlayersBets :: Map PlayerId (Maybe BetData)
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet BetStateData
 
 bettingFinished :: BetStateData -> StateData -> Bool
 bettingFinished betStateData stateData =
-  bets == stateData.totalPlayers
+  bets == stateData.sdTotalPlayers
     where
-      counts = Map.map (maybe 0 (const 1)) betStateData.playersBets
+      counts = Map.map (maybe 0 (const 1)) betStateData.bsdPlayersBets
       bets   = Map.foldl (+) 0 counts
 
 data ResolvingBetStateData = ResolvingBetStateData
-  { flowersToPickUp :: Int
-  , currentFlowersPickedUp :: Int
-  , playerId :: PlayerId
+  { rbsdFlowersToPickUp :: Int
+  , rbsdCurrentFlowersPickedUp :: Int
+  , rbsdPlayerId :: PlayerId
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet ResolvingBetStateData
 
 pickedUpEnough :: ResolvingBetStateData -> Bool
-pickedUpEnough state = state.flowersToPickUp == state.currentFlowersPickedUp
+pickedUpEnough state = state.rbsdFlowersToPickUp == state.rbsdCurrentFlowersPickedUp
 
 data SkullsState (vertex :: SkullsVertex) where
   SkullsInitialState      :: SkullsState Initial
@@ -290,7 +322,7 @@ data GameError
   | NotYourTurn
   | GameIsOver
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet GameError
 
 
 -- * Machine
@@ -312,7 +344,7 @@ data StateBlob
   | BlobResolvingBetState ResolvingBetStateData StateData
   | BlobGameOverState PlayerId
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving (Elm, ToJSON, FromJSON) via ElmStreet StateBlob
 
 makeStateBlob :: SkullsState vertex -> StateBlob
 makeStateBlob = \case
@@ -337,7 +369,7 @@ decideSkulls' :: Command -> SkullsState vertex -> Either GameError Event
 decideSkulls' command state = case (state, command) of
   -- ** Starting a game
   (SkullsInitialState, StartGame initialData)
-    | initialData.players < PlayerCount 2 -> Left TooFewPlayers
+    | initialData.idPlayers < PlayerCount 2 -> Left TooFewPlayers
     | otherwise -> Right $ GameStarted initialData
 
   (SkullsInitialState,         _)            -> Left GameNotStarted
@@ -346,10 +378,10 @@ decideSkulls' command state = case (state, command) of
 
   -- ** Playing a card
   (SkullsPlacingCardsState stateData, PlayCard turnData)
-    | stateData.currentPlayer /= turnData.playerId -> Left NotYourTurn
-    | countStackOfPlayer stateData.currentPlayer stateData == maxCards
+    | stateData.sdCurrentPlayer /= turnData.tdPlayerId -> Left NotYourTurn
+    | countStackOfPlayer stateData.sdCurrentPlayer stateData == maxCards
         -> Left NoMoreCardsToPlay
-    | playedSkull stateData.currentPlayer stateData
+    | playedSkull stateData.sdCurrentPlayer stateData
         -> Left PlayedYourSkull
     | otherwise -> Right $ CardPlayed turnData
 
@@ -359,26 +391,26 @@ decideSkulls' command state = case (state, command) of
 
   -- ** Making a bet
   (SkullsPlacingCardsState stateData, MakeBet bet)
-    | stateData.currentPlayer /= bet.playerId -> Left NotYourTurn
-    | bet.flowers <= totalCardsPlayed stateData -> Right $ BetMade bet
+    | stateData.sdCurrentPlayer /= bet.bdPlayerId -> Left NotYourTurn
+    | bet.bdFlowers <= totalCardsPlayed stateData -> Right $ BetMade bet
     | otherwise -> Left $ BetTooLarge
 
-  (SkullsBettingState (BetStateData{highestBet}) stateData, MakeBet newBet)
-    | stateData.currentPlayer /= newBet.playerId -> Left NotYourTurn
-    | newBet.flowers <= highestBet.flowers -> Left BetMustBeHigher
+  (SkullsBettingState (BetStateData{bsdHighestBet}) stateData, MakeBet newBet)
+    | stateData.sdCurrentPlayer /= newBet.bdPlayerId -> Left NotYourTurn
+    | newBet.bdFlowers <= bsdHighestBet.bdFlowers -> Left BetMustBeHigher
     | otherwise -> Right $ BetMade newBet
 
   (SkullsBettingState _ stateData, PassBet newBet)
-    | stateData.currentPlayer /= newBet.playerId -> Left NotYourTurn
+    | stateData.sdCurrentPlayer /= newBet.pdPlayerId -> Left NotYourTurn
     | otherwise -> Right $ BetPassed
 
   (SkullsResolvingBetState betToWin stateData, PickUpMyStack)
-    | stateData.currentPlayer /= betToWin.playerId -> Left NotYourTurn
-    | otherwise -> attemptPickupFrom stateData.currentPlayer betToWin.flowersToPickUp stateData
+    | stateData.sdCurrentPlayer /= betToWin.rbsdPlayerId -> Left NotYourTurn
+    | otherwise -> attemptPickupFrom stateData.sdCurrentPlayer betToWin.rbsdFlowersToPickUp stateData
 
   (SkullsResolvingBetState betToWin stateData, PickUpFrom playerId)
-    | stateData.currentPlayer /= betToWin.playerId -> Left NotYourTurn
-    | otherwise -> attemptPickupFrom playerId betToWin.flowersToPickUp stateData
+    | stateData.sdCurrentPlayer /= betToWin.rbsdPlayerId -> Left NotYourTurn
+    | otherwise -> attemptPickupFrom playerId betToWin.rbsdFlowersToPickUp stateData
 
   -- ** Bookkeeping
   -- Can't do anything if the same is over.
@@ -435,16 +467,16 @@ evolveSkulls state eitherErrorEvent =
     -- ** Place a card.
     -- i.e. update the cards the player has and move to the next player.SkullsInitialState
     (SkullsPlacingCardsState stateData, CardPlayed turnData) ->
-      let newStacks = insertWith (++) (turnData.playerId) [turnData.card] (stateData.playerStacks)
+      let newStacks = insertWith (++) (turnData.tdPlayerId) [turnData.tdCard] (stateData.sdPlayerStacks)
         in EvolutionResult $ SkullsPlacingCardsState $
-          (advancePlayer stateData) { playerStacks = newStacks }
+          (advancePlayer stateData) { sdPlayerStacks = newStacks }
 
     -- Record the first bet, go into the betting state.
     (SkullsPlacingCardsState stateData, BetMade betData) ->
       EvolutionResult $ SkullsBettingState
         (BetStateData
-          { highestBet = betData
-          , playersBets = Map.singleton stateData.currentPlayer (Just betData)
+          { bsdHighestBet = betData
+          , bsdPlayersBets = Map.singleton stateData.sdCurrentPlayer (Just betData)
           }
         )
         (advancePlayer stateData)
@@ -460,9 +492,9 @@ evolveSkulls state eitherErrorEvent =
       in if bettingFinished betStateData stateData
             then EvolutionResult $ SkullsResolvingBetState
                   (ResolvingBetStateData
-                    { flowersToPickUp = newBet.flowers
-                    , currentFlowersPickedUp = 0
-                    , playerId = newBet.playerId -- The player who made the highest bet
+                    { rbsdFlowersToPickUp = newBet.bdFlowers
+                    , rbsdCurrentFlowersPickedUp = 0
+                    , rbsdPlayerId = newBet.bdPlayerId -- The player who made the highest bet
                     })
                   newState
            else EvolutionResult $ SkullsBettingState betStateData newState
@@ -474,24 +506,24 @@ evolveSkulls state eitherErrorEvent =
     (SkullsResolvingBetState betStateData stateData, WonRound) ->
       let newState =
             stateData
-              { playerStacks = mempty
+              { sdPlayerStacks = mempty
               -- TODO: Mabe the next player changes here; it's not just the first.
-              , currentPlayer = firstPlayer
-              } & recordWin betStateData.playerId
+              , sdCurrentPlayer = firstPlayer
+              } & recordWin betStateData.rbsdPlayerId
        in EvolutionResult $ SkullsPlacingCardsState newState
 
     -- If you've won two; you win! Otherwise, keep playing.
     (SkullsResolvingBetState betStateData _, WonGame) ->
-      EvolutionResult $ SkullsGameOverState betStateData.playerId
+      EvolutionResult $ SkullsGameOverState betStateData.rbsdPlayerId
 
     -- ** Failed a bet; just count it and go back to the start.
     (SkullsResolvingBetState betStateData stateData, FailedBet) ->
       let newState =
             stateData
-              { playerStacks = mempty
+              { sdPlayerStacks = mempty
                 -- TODO: Mabe the next player changes here; it's not just the first.
-              , currentPlayer = firstPlayer
-              } & recordLoss betStateData.playerId
+              , sdCurrentPlayer = firstPlayer
+              } & recordLoss betStateData.rbsdPlayerId
       in EvolutionResult $ SkullsPlacingCardsState newState
 
     (SkullsResolvingBetState {}, _) -> EvolutionResult state
@@ -505,11 +537,11 @@ initialResult initialData =
   EvolutionResult $
     SkullsPlacingCardsState $
       StateData
-        { currentPlayer = initialData.startingPlayer
-        , totalPlayers  = initialData.players
-        , playerStacks  = mempty
-        , winCounts     = mempty
-        , lossCounts    = mempty
+        { sdCurrentPlayer = initialData.idStartingPlayer
+        , sdTotalPlayers  = initialData.idPlayers
+        , sdPlayerStacks  = mempty
+        , sdWinCounts     = mempty
+        , sdLossCounts    = mempty
         }
 
 
@@ -521,26 +553,3 @@ printMermaid = putStrLn $ unpack t
       Mermaid t = renderUntypedGraph (machineAsGraph m)
       m :: StateMachineT Identity Command GameResult
       m = Basic $ deciderMachine (decider $ InitialState SkullsInitialState)
-
-
--- data FullStateData
---   = InitialThing
-
--- projection :: StateMachineT IO Command ()
--- projection = Basic $ fullStateProjection
-
--- fullStateProjection :: BaseMachineT IO SkullsTopology Command ()
--- fullStateProjection = BaseMachineT
---   { initialState = InitialState SkullsInitialState
---   , action = action
---   }
---     where
---       action :: SkullsState v -> Command -> ActionResult IO SkullsTopology SkullsState v ()
---       action state input =
---            case state of
---              SkullsInitialState -> ActionResult $ do
---                putStrLn "X"
---                pure ((), state)
-
--- Note: The above doesn't work, because it only takes the _input_; _not_ the
--- internal state.
