@@ -106,3 +106,6 @@ encodeStateBlob x = E.object <| case x of
     T.BlobBettingState x1 x2 -> [("tag", E.string "BlobBettingState"), ("contents", E.list identity [encodeBetStateData x1, encodeStateData x2])]
     T.BlobResolvingBetState x1 x2 -> [("tag", E.string "BlobResolvingBetState"), ("contents", E.list identity [encodeResolvingBetStateData x1, encodeStateData x2])]
     T.BlobGameOverState x1 -> [("tag", E.string "BlobGameOverState"), ("contents", encodePlayerId x1)]
+
+encodeGameResult : T.GameResult -> Value
+encodeGameResult = (elmStreetEncodeEither encodeGameError (elmStreetEncodePair encodeEvent encodeStateBlob)) << T.unGameResult

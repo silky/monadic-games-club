@@ -20,6 +20,7 @@ type Types =
    , ResolvingBetStateData
    , GameError
    , StateBlob
+   , GameResult
    ]
 
 main :: IO ()

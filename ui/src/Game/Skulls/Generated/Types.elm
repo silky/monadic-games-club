@@ -194,3 +194,9 @@ type StateBlob
     | BlobBettingState BetStateData StateData
     | BlobResolvingBetState ResolvingBetStateData StateData
     | BlobGameOverState PlayerId
+
+type GameResult
+    = GameResult (Result GameError ((Event, StateBlob)))
+
+unGameResult : GameResult -> Result GameError ((Event, StateBlob))
+unGameResult (GameResult x) = x

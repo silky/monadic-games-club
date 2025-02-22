@@ -109,3 +109,6 @@ decodeStateBlob =
             "BlobGameOverState" -> D.field "contents" <| D.map T.BlobGameOverState decodePlayerId
             c -> D.fail <| "StateBlob doesn't have such constructor: " ++ c
     in D.andThen decide (D.field "tag" D.string)
+
+decodeGameResult : Decoder T.GameResult
+decodeGameResult = D.map T.GameResult (elmStreetDecodeEither decodeGameError (elmStreetDecodePair decodeEvent decodeStateBlob))

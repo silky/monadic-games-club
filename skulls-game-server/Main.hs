@@ -37,6 +37,8 @@ type Api = "game" :> WebSocket
 server :: Server Api
 server = playGame initGame
  where
+  -- TODO: I think we need the 'pingThread' so the connection doesn't go
+  -- stale.
   playGame :: MonadIO m
            => StateMachineT Identity Command GameResult
            -> Connection
@@ -51,8 +53,8 @@ server = playGame initGame
           let (output, machine') = runIdentity $ run machine command
           WS.sendTextData conn (encode output)
           case output of
-            Right (WonGame, _) -> putStrLn "Winner!"
-            _                  -> playGame machine' conn
+            GameResult (Right (WonGame, _)) -> putStrLn "Winner!"
+            _                               -> playGame machine' conn
 
 
 -- * WAI/Servant busywork

@@ -52,6 +52,7 @@ import "elm-street" Elm.Generic (toElmDefinition, elmRef)
 
 -- * Domain
 
+
 data Suit
   = Red
   | Green
@@ -80,14 +81,14 @@ isSkull (Flower _) = False
 
 newtype PlayerId = PlayerId Int
   deriving stock (Generic)
-  deriving newtype (Eq, Show, Num, Ord)
+  deriving newtype (Eq, Show, Num, Ord, ToJSON, FromJSON)
   deriving anyclass (ToJSONKey, FromJSONKey)
-  deriving (Elm, ToJSON, FromJSON) via ElmStreet PlayerId
+  deriving (Elm) via ElmStreet PlayerId
 
 newtype PlayerCount = PlayerCount Int
   deriving stock (Generic)
-  deriving newtype (Eq, Show, Num, Ord)
-  deriving (Elm, ToJSON, FromJSON) via ElmStreet PlayerCount
+  deriving newtype (Eq, Show, Num, Ord, ToJSON, FromJSON)
+  deriving (Elm) via ElmStreet PlayerCount
 
 -- | Players start counting at zero because we use mod to keep track of player
 -- ids
@@ -152,7 +153,6 @@ data Event
   | FailedBet -- It's okay to fail a bet actually.
   deriving stock (Eq, Show, Generic)
   deriving (Elm, ToJSON, FromJSON) via ElmStreet Event
-
 
 -- * Topology
 
@@ -346,6 +346,11 @@ data StateBlob
   deriving stock (Eq, Show, Generic)
   deriving (Elm, ToJSON, FromJSON) via ElmStreet StateBlob
 
+newtype GameResult = GameResult (Either GameError (Event, StateBlob))
+  deriving stock (Eq, Show, Generic)
+  deriving newtype (ToJSON, FromJSON)
+  deriving (Elm) via ElmStreet GameResult
+
 makeStateBlob :: SkullsState vertex -> StateBlob
 makeStateBlob = \case
   SkullsInitialState -> BlobInitialState
@@ -354,10 +359,13 @@ makeStateBlob = \case
   SkullsResolvingBetState r s -> BlobResolvingBetState r s
   SkullsGameOverState p -> BlobGameOverState p
 
-type GameResult = Either GameError (Event, StateBlob)
-
+-- TODO: This is wrong! The state it's referring to here is the _past_ state.
+--
+-- In fact I think this means we might need to switch entirely away from the
+-- 'decider' model; because in that setting we can't get the actual state
+-- output until the evolve call, which we do not have access to.
 decideSkulls :: Command -> SkullsState vertex -> GameResult
-decideSkulls command = g . (decideSkulls' command &&& makeStateBlob)
+decideSkulls command = GameResult . g . (decideSkulls' command &&& makeStateBlob)
   where
     g :: (Either a b, c) -> Either a (b, c)
     g = \case
@@ -451,7 +459,7 @@ evolveSkulls
   :: SkullsState vertex
   -> GameResult
   -> EvolutionResult SkullsTopology SkullsState vertex GameResult
-evolveSkulls state eitherErrorEvent =
+evolveSkulls state (GameResult eitherErrorEvent) =
   case eitherErrorEvent of
   -- Error? Nothing changes.
   Left _ -> EvolutionResult state
