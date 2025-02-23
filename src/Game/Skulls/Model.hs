@@ -23,23 +23,21 @@ module Game.Skulls.Model where
   If someone wins twice, they win the game.
 -}
 
+import "aeson" Data.Aeson
 import "base" Data.Function ((&))
 import "base" Data.Functor.Identity (Identity)
+import "base" GHC.Generics (Generic)
 import "containers" Data.Map (Map, insertWith)
 import "containers" Data.Map qualified as Map
 import "crem" Crem.BaseMachine (pureResult, ActionResult, InitialState (..), BaseMachine, BaseMachineT(..) )
-import "crem" Crem.Decider (Decider (..), deciderMachine, EvolutionResult (..))
 import "crem" Crem.Render.Render
 import "crem" Crem.Render.RenderableVertices (AllVertices (..), RenderableVertices)
 import "crem" Crem.StateMachine (StateMachineT (Basic))
 import "crem" Crem.Topology
-import "singletons-base" Data.Singletons.Base.TH
-import "text" Data.Text (unpack)
-import "extra" Data.Tuple.Extra ((&&&))
-import "aeson" Data.Aeson
-import "base" GHC.Generics (Generic)
 import "elm-street" Elm (Elm, ElmStreet (..), ElmDefinition(DefPrim), ElmPrim(ElmList))
 import "elm-street" Elm.Generic (toElmDefinition, elmRef)
+import "singletons-base" Data.Singletons.Base.TH
+import "text" Data.Text (unpack)
 
 -- TODO:
 --
@@ -328,15 +326,15 @@ data GameError
 
 -- * Machine
 
-decider
-  :: InitialState SkullsState
-  -> Decider SkullsTopology Command GameResult
-decider initialState =
-  Decider
-    { deciderInitialState = initialState
-    , decide = decideSkulls
-    , evolve = evolveSkulls
-    }
+-- decider
+--   :: InitialState SkullsState
+--   -> Decider SkullsTopology Command GameResult
+-- decider initialState =
+--   Decider
+--     { deciderInitialState = initialState
+--     , decide = decideSkulls
+--     , evolve = evolveSkulls
+--     }
 
 data StateBlob
   = BlobInitialState
@@ -541,17 +539,17 @@ skullsMachine =
 -- In fact I think this means we might need to switch entirely away from the
 -- 'decider' model; because in that setting we can't get the actual state
 -- output until the evolve call, which we do not have access to.
-decideSkulls :: Command -> SkullsState vertex -> GameResult
-decideSkulls command = GameResult . g . (decideSkulls' command &&& makeStateBlob)
-  where
-    g :: (Either a b, c) -> Either a (b, c)
-    g = \case
-      (Left l, _) -> Left l
-      (Right b, c) -> Right (b, c)
+-- decideSkulls :: Command -> SkullsState vertex -> GameResult
+-- decideSkulls command = GameResult . g . (decideSkulls' command &&& makeStateBlob)
+--   where
+--     g :: (Either a b, c) -> Either a (b, c)
+--     g = \case
+--       (Left l, _) -> Left l
+--       (Right b, c) -> Right (b, c)
 
 -- | Decides the details of which events can trigger state transitions.
-decideSkulls' :: Command -> SkullsState vertex -> Either GameError Event
-decideSkulls' command state = case (state, command) of
+-- decideSkulls' :: Command -> SkullsState vertex -> Either GameError Event
+-- decideSkulls' command state = case (state, command) of
   -- ** Starting a game
   -- (SkullsInitialState, StartGame initialData)
   --   | initialData.idPlayers < PlayerCount 2 -> Left TooFewPlayers
@@ -632,41 +630,41 @@ attemptPickupFrom playerId flowers stateData =
         Left _  -> FailedBet
 
 -- | Perfoms state transitions.
-evolveSkulls
-  :: SkullsState vertex
-  -> GameResult
-  -> EvolutionResult SkullsTopology SkullsState vertex GameResult
-evolveSkulls state (GameResult eitherErrorEvent) =
-  case eitherErrorEvent of
-  -- Error? Nothing changes.
-  Left _ -> EvolutionResult state
+-- evolveSkulls
+--   :: SkullsState vertex
+--   -> GameResult
+--   -> EvolutionResult SkullsTopology SkullsState vertex GameResult
+-- evolveSkulls state (GameResult eitherErrorEvent) =
+--   case eitherErrorEvent of
+--   -- Error? Nothing changes.
+--   Left _ -> EvolutionResult state
 
-  -- Otherwise, we can do something
-  Right (event, _) -> case (state, event) of
-    -- (SkullsInitialState, GameStarted initialData) ->
-    --   initialResult initialData
+--   -- Otherwise, we can do something
+--   Right (event, _) -> case (state, event) of
+--     -- (SkullsInitialState, GameStarted initialData) ->
+--     --   initialResult initialData
 
-    -- (SkullsInitialState, _)    -> EvolutionResult state
-    -- (SkullsGameOverState {}, _) -> EvolutionResult state
+--     -- (SkullsInitialState, _)    -> EvolutionResult state
+--     -- (SkullsGameOverState {}, _) -> EvolutionResult state
 
-    -- ** Place a card.
-    -- i.e. update the cards the player has and move to the next player.SkullsInitialState
-    -- (SkullsPlacingCardsState stateData, CardPlayed turnData) ->
-    --   let newStacks = insertWith (++) (turnData.tdPlayerId) [turnData.tdCard] (stateData.sdPlayerStacks)
-    --     in EvolutionResult $ SkullsPlacingCardsState $
-    --       (advancePlayer stateData) { sdPlayerStacks = newStacks }
+--     -- ** Place a card.
+--     -- i.e. update the cards the player has and move to the next player.SkullsInitialState
+--     -- (SkullsPlacingCardsState stateData, CardPlayed turnData) ->
+--     --   let newStacks = insertWith (++) (turnData.tdPlayerId) [turnData.tdCard] (stateData.sdPlayerStacks)
+--     --     in EvolutionResult $ SkullsPlacingCardsState $
+--     --       (advancePlayer stateData) { sdPlayerStacks = newStacks }
 
-    -- Record the first bet, go into the betting state.
-    -- (SkullsPlacingCardsState stateData, BetMade betData) ->
-    --   EvolutionResult $ SkullsBettingState
-    --     (BetStateData
-    --       { bsdHighestBet = betData
-    --       , bsdPlayersBets = Map.singleton stateData.sdCurrentPlayer (Just betData)
-    --       }
-    --     )
-    --     (advancePlayer stateData)
+--     -- Record the first bet, go into the betting state.
+--     -- (SkullsPlacingCardsState stateData, BetMade betData) ->
+--     --   EvolutionResult $ SkullsBettingState
+--     --     (BetStateData
+--     --       { bsdHighestBet = betData
+--     --       , bsdPlayersBets = Map.singleton stateData.sdCurrentPlayer (Just betData)
+--     --       }
+--     --     )
+--     --     (advancePlayer stateData)
 
-    (SkullsPlacingCardsState {}, _) -> EvolutionResult state
+--     (SkullsPlacingCardsState {}, _) -> EvolutionResult state
 
     -- ** Someone raised a bet.
     -- Throw away the last highest bet, and optionally go into bet resolution,
@@ -685,7 +683,7 @@ evolveSkulls state (GameResult eitherErrorEvent) =
     --        else EvolutionResult $ SkullsBettingState betStateData newState
 
 
-    (SkullsBettingState {}, _) -> EvolutionResult state
+    -- (SkullsBettingState {}, _) -> EvolutionResult state
 
     -- ** Won a bet.
     -- (SkullsResolvingBetState betStateData stateData, WonRound) ->
@@ -711,23 +709,23 @@ evolveSkulls state (GameResult eitherErrorEvent) =
     --           } & recordLoss betStateData.rbsdPlayerId
     --   in EvolutionResult $ SkullsPlacingCardsState newState
 
-    (SkullsResolvingBetState {}, _) -> EvolutionResult state
+    -- (SkullsResolvingBetState {}, _) -> EvolutionResult state
 
 
-initialResult
-  :: (AllowedTransition SkullsTopology initialVertex PlacingCards)
-  => InitialData
-  -> EvolutionResult SkullsTopology SkullsState initialVertex GameResult
-initialResult initialData =
-  EvolutionResult $
-    SkullsPlacingCardsState $
-      StateData
-        { sdCurrentPlayer = initialData.idStartingPlayer
-        , sdTotalPlayers  = initialData.idPlayers
-        , sdPlayerStacks  = mempty
-        , sdWinCounts     = mempty
-        , sdLossCounts    = mempty
-        }
+-- initialResult
+--   :: (AllowedTransition SkullsTopology initialVertex PlacingCards)
+--   => InitialData
+--   -> EvolutionResult SkullsTopology SkullsState initialVertex GameResult
+-- initialResult initialData =
+--   EvolutionResult $
+--     SkullsPlacingCardsState $
+--       StateData
+--         { sdCurrentPlayer = initialData.idStartingPlayer
+--         , sdTotalPlayers  = initialData.idPlayers
+--         , sdPlayerStacks  = mempty
+--         , sdWinCounts     = mempty
+--         , sdLossCounts    = mempty
+--         }
 
 
 -- * Rendering
@@ -737,4 +735,4 @@ printMermaid = putStrLn $ unpack t
     where
       Mermaid t = renderUntypedGraph (machineAsGraph m)
       m :: StateMachineT Identity Command GameResult
-      m = Basic $ deciderMachine (decider $ InitialState SkullsInitialState)
+      m = Basic skullsMachine
