@@ -78,8 +78,7 @@ update msg model =
                     Ok (_, s) -> { model | gameState = s }
                     Err err -> { model | gameError = Just err }
                 Err err -> model
-
-          in ( model, Effect.none )
+          in ( newModel, Effect.none )
 
 
 -- * Subscriptions
