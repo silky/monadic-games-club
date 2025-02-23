@@ -8,8 +8,6 @@ extra-source-files:
 dependencies:
   - base >= 4.15 && < 4.19
   - crem
-  - singletons-base
-  - bytestring
 
 language:
   GHC2021
@@ -40,16 +38,30 @@ ghc-options:
   - -Wno-prepositive-qualified-module
   - -Wno-safe
   - -Wno-unsafe
+  - -Wno-missed-specialisations
+
+  # Bring back one day
+  - -Wno-unused-packages
 
 library:
   source-dirs: src
   dependencies:
     - aeson
+    # - bytestring
     - containers
+    - elm-street
     - extra
+    - singletons-base
     - text
 
 executables:
+  generate-elm-types:
+    source-dirs: generate-elm-types
+    main: Main.hs
+    dependencies:
+      - elm-street
+      - monadic-games-club
+
   skulls-game-server:
     source-dirs: skulls-game-server
     main: Main.hs
@@ -59,7 +71,7 @@ executables:
       - servant
       - servant-server
       - servant-websockets
-      - text
+      # - text
       - wai
       - warp
       - websockets

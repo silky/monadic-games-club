@@ -36,8 +36,9 @@
               };
             in with pkgs; [
               cabalWrapped
-              hpack
               ghcid
+              hpack
+              nodejs
               stylish-haskell
               watchWithGhcid
 
@@ -45,6 +46,7 @@
                 aeson
                 bytestring
                 crem
+                elm-street
                 extra
                 hspec
                 http-types
@@ -57,6 +59,9 @@
                 wai
                 warp
                 websockets
+
+                # For css
+                clay
               ]))
             ];
           };

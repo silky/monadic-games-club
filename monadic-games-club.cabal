@@ -30,16 +30,40 @@ library
       PackageImports
       TypeFamilies
       OverloadedStrings
-  ghc-options: -Weverything -Wno-all-missed-specialisations -Wno-implicit-prelude -Wno-missing-export-lists -Wno-missing-home-modules -Wno-missing-import-lists -Wno-missing-kind-signatures -Wno-missing-safe-haskell-mode -Wno-prepositive-qualified-module -Wno-safe -Wno-unsafe
+  ghc-options: -Weverything -Wno-all-missed-specialisations -Wno-implicit-prelude -Wno-missing-export-lists -Wno-missing-home-modules -Wno-missing-import-lists -Wno-missing-kind-signatures -Wno-missing-safe-haskell-mode -Wno-prepositive-qualified-module -Wno-safe -Wno-unsafe -Wno-missed-specialisations -Wno-unused-packages
   build-depends:
       aeson
     , base >=4.15 && <4.19
-    , bytestring
     , containers
     , crem
+    , elm-street
     , extra
     , singletons-base
     , text
+  default-language: GHC2021
+
+executable generate-elm-types
+  main-is: Main.hs
+  other-modules:
+      Paths_monadic_games_club
+  hs-source-dirs:
+      generate-elm-types
+  default-extensions:
+      DataKinds
+      DeriveAnyClass
+      DeriveLift
+      DerivingStrategies
+      DerivingVia
+      LambdaCase
+      PackageImports
+      TypeFamilies
+      OverloadedStrings
+  ghc-options: -Weverything -Wno-all-missed-specialisations -Wno-implicit-prelude -Wno-missing-export-lists -Wno-missing-home-modules -Wno-missing-import-lists -Wno-missing-kind-signatures -Wno-missing-safe-haskell-mode -Wno-prepositive-qualified-module -Wno-safe -Wno-unsafe -Wno-missed-specialisations -Wno-unused-packages
+  build-depends:
+      base >=4.15 && <4.19
+    , crem
+    , elm-street
+    , monadic-games-club
   default-language: GHC2021
 
 executable skulls-game-server
@@ -58,18 +82,15 @@ executable skulls-game-server
       PackageImports
       TypeFamilies
       OverloadedStrings
-  ghc-options: -Weverything -Wno-all-missed-specialisations -Wno-implicit-prelude -Wno-missing-export-lists -Wno-missing-home-modules -Wno-missing-import-lists -Wno-missing-kind-signatures -Wno-missing-safe-haskell-mode -Wno-prepositive-qualified-module -Wno-safe -Wno-unsafe
+  ghc-options: -Weverything -Wno-all-missed-specialisations -Wno-implicit-prelude -Wno-missing-export-lists -Wno-missing-home-modules -Wno-missing-import-lists -Wno-missing-kind-signatures -Wno-missing-safe-haskell-mode -Wno-prepositive-qualified-module -Wno-safe -Wno-unsafe -Wno-missed-specialisations -Wno-unused-packages
   build-depends:
       aeson
     , base >=4.15 && <4.19
-    , bytestring
     , crem
     , monadic-games-club
     , servant
     , servant-server
     , servant-websockets
-    , singletons-base
-    , text
     , wai
     , warp
     , websockets
@@ -93,14 +114,12 @@ test-suite monadic-games-club-spec
       PackageImports
       TypeFamilies
       OverloadedStrings
-  ghc-options: -Weverything -Wno-all-missed-specialisations -Wno-implicit-prelude -Wno-missing-export-lists -Wno-missing-home-modules -Wno-missing-import-lists -Wno-missing-kind-signatures -Wno-missing-safe-haskell-mode -Wno-prepositive-qualified-module -Wno-safe -Wno-unsafe
+  ghc-options: -Weverything -Wno-all-missed-specialisations -Wno-implicit-prelude -Wno-missing-export-lists -Wno-missing-home-modules -Wno-missing-import-lists -Wno-missing-kind-signatures -Wno-missing-safe-haskell-mode -Wno-prepositive-qualified-module -Wno-safe -Wno-unsafe -Wno-missed-specialisations -Wno-unused-packages
   build-tool-depends:
       hspec-discover:hspec-discover
   build-depends:
       base >=4.15 && <4.19
-    , bytestring
     , crem
     , hspec
     , monadic-games-club
-    , singletons-base
   default-language: GHC2021
