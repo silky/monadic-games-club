@@ -8,17 +8,8 @@ import Game.Skulls.Generated.ElmStreet exposing (..)
 import Game.Skulls.Generated.Types as T
 
 
-decodeSuit : Decoder T.Suit
-decodeSuit = elmStreetDecodeEnum T.readSuit
-
 decodeCard : Decoder T.Card
-decodeCard =
-    let decide : String -> Decoder T.Card
-        decide x = case x of
-            "Flower" -> D.field "contents" <| D.map T.Flower decodeSuit
-            "Skull" -> D.field "contents" <| D.map T.Skull decodeSuit
-            c -> D.fail <| "Card doesn't have such constructor: " ++ c
-    in D.andThen decide (D.field "tag" D.string)
+decodeCard = elmStreetDecodeEnum T.readCard
 
 decodePlayerId : Decoder T.PlayerId
 decodePlayerId = D.map T.PlayerId D.int
@@ -87,7 +78,7 @@ decodeHitSkull = elmStreetDecodeEnum T.readHitSkull
 decodeBetStateData : Decoder T.BetStateData
 decodeBetStateData = D.succeed T.BetStateData
     |> required "highestBet" decodeBetData
-    |> required "playersBets" (D.list (elmStreetDecodePair decodePlayerId (nullable decodeBetData)))
+    |> required "playersBets" (D.list (elmStreetDecodePair decodePlayerId (elmStreetDecodeEither decodePassData decodeBetData)))
 
 decodeResolvingBetStateData : Decoder T.ResolvingBetStateData
 decodeResolvingBetStateData = D.succeed T.ResolvingBetStateData

@@ -7,13 +7,8 @@ import Game.Skulls.Generated.ElmStreet exposing (..)
 import Game.Skulls.Generated.Types as T
 
 
-encodeSuit : T.Suit -> Value
-encodeSuit = E.string << T.showSuit
-
 encodeCard : T.Card -> Value
-encodeCard x = E.object <| case x of
-    T.Flower x1 -> [("tag", E.string "Flower"), ("contents", encodeSuit x1)]
-    T.Skull x1 -> [("tag", E.string "Skull"), ("contents", encodeSuit x1)]
+encodeCard = E.string << T.showCard
 
 encodePlayerId : T.PlayerId -> Value
 encodePlayerId = E.int << T.unPlayerId
@@ -26,7 +21,7 @@ encodeBetData x = E.object
     ]
 
 encodePlayerCount : T.PlayerCount -> Value
-encodePlayerCount = E.int << T.unPlayerCount
+encodePlayerCount x = E.int x.playerCount
 
 encodeInitialData : T.InitialData -> Value
 encodeInitialData x = E.object
@@ -85,7 +80,7 @@ encodeBetStateData : T.BetStateData -> Value
 encodeBetStateData x = E.object
     [ ("tag", E.string "BetStateData")
     , ("highestBet", encodeBetData x.highestBet)
-    , ("playersBets", (E.list (elmStreetEncodePair encodePlayerId (elmStreetEncodeMaybe encodeBetData))) x.playersBets)
+    , ("playersBets", (E.list (elmStreetEncodePair encodePlayerId (elmStreetEncodeEither encodePassData encodeBetData))) x.playersBets)
     ]
 
 encodeResolvingBetStateData : T.ResolvingBetStateData -> Value

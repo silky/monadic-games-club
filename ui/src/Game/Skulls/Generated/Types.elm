@@ -4,39 +4,23 @@ import Time exposing (Posix)
 import Json.Decode exposing (Value)
 
 
-type Suit
-    = Red
-    | Green
-    | Blue
-    | Orange
-    | Pink
-    | Black
+type Card
+    = Flower
+    | Skull
 
-showSuit : Suit -> String
-showSuit x = case x of
-    Red -> "Red"
-    Green -> "Green"
-    Blue -> "Blue"
-    Orange -> "Orange"
-    Pink -> "Pink"
-    Black -> "Black"
+showCard : Card -> String
+showCard x = case x of
+    Flower -> "Flower"
+    Skull -> "Skull"
 
-readSuit : String -> Maybe Suit
-readSuit x = case x of
-    "Red" -> Just Red
-    "Green" -> Just Green
-    "Blue" -> Just Blue
-    "Orange" -> Just Orange
-    "Pink" -> Just Pink
-    "Black" -> Just Black
+readCard : String -> Maybe Card
+readCard x = case x of
+    "Flower" -> Just Flower
+    "Skull" -> Just Skull
     _ -> Nothing
 
-universeSuit : List Suit
-universeSuit = [Red, Green, Blue, Orange, Pink, Black]
-
-type Card
-    = Flower Suit
-    | Skull Suit
+universeCard : List Card
+universeCard = [Flower, Skull]
 
 type PlayerId
     = PlayerId Int
@@ -49,11 +33,9 @@ type alias BetData =
     , playerId : PlayerId
     }
 
-type PlayerCount
-    = PlayerCount Int
-
-unPlayerCount : PlayerCount -> Int
-unPlayerCount (PlayerCount x) = x
+type alias PlayerCount =
+    { playerCount : Int
+    }
 
 type alias InitialData =
     { players : PlayerCount
@@ -112,7 +94,7 @@ universeHitSkull = [HitSkull]
 
 type alias BetStateData =
     { highestBet : BetData
-    , playersBets : List ((PlayerId, Maybe BetData))
+    , playersBets : List ((PlayerId, Result PassData BetData))
     }
 
 type alias ResolvingBetStateData =
@@ -134,6 +116,7 @@ type GameError
     | BetTooLarge
     | CanOnlyResolveBetNow
     | PickedUpSkull
+    | CantBetNow
     | NotYourTurn
     | GameIsOver
 
@@ -151,6 +134,7 @@ showGameError x = case x of
     BetTooLarge -> "BetTooLarge"
     CanOnlyResolveBetNow -> "CanOnlyResolveBetNow"
     PickedUpSkull -> "PickedUpSkull"
+    CantBetNow -> "CantBetNow"
     NotYourTurn -> "NotYourTurn"
     GameIsOver -> "GameIsOver"
 
@@ -168,6 +152,7 @@ readGameError x = case x of
     "BetTooLarge" -> Just BetTooLarge
     "CanOnlyResolveBetNow" -> Just CanOnlyResolveBetNow
     "PickedUpSkull" -> Just PickedUpSkull
+    "CantBetNow" -> Just CantBetNow
     "NotYourTurn" -> Just NotYourTurn
     "GameIsOver" -> Just GameIsOver
     _ -> Nothing
@@ -185,6 +170,7 @@ universeGameError = [ TooFewPlayers
                     , BetTooLarge
                     , CanOnlyResolveBetNow
                     , PickedUpSkull
+                    , CantBetNow
                     , NotYourTurn
                     , GameIsOver ]
 
