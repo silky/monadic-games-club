@@ -4,8 +4,7 @@ import "elm-street" Elm (generateElm, defaultSettings)
 import "monadic-games-club" Game.Skulls.Model
 
 type Types =
-  '[ Suit
-   , Card
+  '[ Card
    , PlayerId
    , BetData
    , PlayerCount

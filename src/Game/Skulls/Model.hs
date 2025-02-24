@@ -50,20 +50,9 @@ import "text" Data.Text (unpack)
 
 -- * Domain
 
-
-data Suit
-  = Red
-  | Green
-  | Blue
-  | Orange
-  | Pink
-  | Black
-  deriving stock (Eq, Show, Generic)
-  deriving (Elm, ToJSON, FromJSON) via ElmStreet Suit
-
 data Card
-  = Flower Suit
-  | Skull  Suit
+  = Flower
+  | Skull
   deriving stock (Eq, Show, Generic)
   deriving (Elm, ToJSON, FromJSON) via ElmStreet Card
 
@@ -71,11 +60,18 @@ maxFlowers :: Int
 maxFlowers = 4
 
 maxCards :: Int
-maxCards = maxFlowers + 1
+maxCards = maxFlowers + maxSkulls
+
+maxSkulls :: Int
+maxSkulls = 1
 
 isSkull :: Card -> Bool
-isSkull (Skull _)  = True
-isSkull (Flower _) = False
+isSkull Skull = True
+isSkull Flower = False
+
+isFlower :: Card -> Bool
+isFlower Skull = False
+isFlower Flower = True
 
 newtype PlayerId = PlayerId Int
   deriving stock (Generic)
@@ -83,7 +79,7 @@ newtype PlayerId = PlayerId Int
   deriving anyclass (ToJSONKey, FromJSONKey)
   deriving (Elm) via ElmStreet PlayerId
 
-newtype PlayerCount = PlayerCount Int
+newtype PlayerCount = PlayerCount { unPlayerCount :: Int }
   deriving stock (Generic)
   deriving newtype (Eq, Show, Num, Ord, ToJSON, FromJSON)
   deriving (Elm) via ElmStreet PlayerCount
@@ -95,7 +91,7 @@ firstPlayer = PlayerId 0
 
 nextPlayer :: PlayerCount -> PlayerId -> PlayerId
 nextPlayer (PlayerCount count) (PlayerId i)
-  = PlayerId $ (i + 1 `mod` count)
+  = PlayerId $ ((i + 1) `mod` count)
 
 -- * Commands and events
 
@@ -198,14 +194,14 @@ instance {-# OVERLAPPING #-} ToJSON   (Map PlayerId Int)
 instance {-# OVERLAPPING #-} FromJSON (Map PlayerId Int)
   where parseJSON v = Map.fromList <$> parseJSON @[(PlayerId, Int)] v
 
-instance Elm (Map PlayerId (Maybe BetData)) where
-  toElmDefinition _ = DefPrim $ ElmList (elmRef @(PlayerId, Maybe BetData))
+instance Elm (Map PlayerId (Either PassData BetData)) where
+  toElmDefinition _ = DefPrim $ ElmList (elmRef @(PlayerId, Either PassData BetData))
 
-instance {-# OVERLAPPING #-} ToJSON   (Map PlayerId (Maybe BetData))
+instance {-# OVERLAPPING #-} ToJSON   (Map PlayerId (Either PassData BetData))
   where toJSON m = toJSON $ Map.toList m
 
-instance {-# OVERLAPPING #-} FromJSON (Map PlayerId (Maybe BetData))
-  where parseJSON v = Map.fromList <$> parseJSON @[(PlayerId, Maybe BetData)] v
+instance {-# OVERLAPPING #-} FromJSON (Map PlayerId (Either PassData BetData))
+  where parseJSON v = Map.fromList <$> parseJSON @[(PlayerId, Either PassData BetData)] v
 
 data StateData = StateData
   { sdCurrentPlayer :: PlayerId
@@ -265,17 +261,22 @@ data HitSkull = HitSkull
 
 data BetStateData = BetStateData
   { bsdHighestBet  :: BetData
-  , bsdPlayersBets :: Map PlayerId (Maybe BetData)
+  , bsdPlayersBets :: Map PlayerId (Either PassData BetData)
   }
   deriving stock (Eq, Show, Generic)
   deriving (Elm, ToJSON, FromJSON) via ElmStreet BetStateData
 
-bettingFinished :: BetStateData -> StateData -> Bool
-bettingFinished betStateData stateData =
-  bets == stateData.sdTotalPlayers
+-- bettingFinished :: BetStateData -> StateData -> Bool
+-- bettingFinished betStateData stateData =
+--   bets == unPlayerCount stateData.sdTotalPlayers
+--     where
+--       bets = length $ Map.toList betStateData.bsdPlayersBets
+
+betWouldFinish :: BetStateData -> StateData -> Bool
+betWouldFinish BetStateData{bsdPlayersBets} stateData =
+  bets == unPlayerCount stateData.sdTotalPlayers - 1
     where
-      counts = Map.map (maybe 0 (const 1)) betStateData.bsdPlayersBets
-      bets   = Map.foldl (+) 0 counts
+      bets = length $ Map.toList bsdPlayersBets
 
 data ResolvingBetStateData = ResolvingBetStateData
   { rbsdFlowersToPickUp :: Int
@@ -316,6 +317,7 @@ data GameError
   -- ** Resolving a bet
   | PickedUpSkull
   | CantBetNow
+  | CantPickUpZeroCards
 
   -- ** Generic
   | NotYourTurn
@@ -358,7 +360,6 @@ makeStateBlob = \case
   SkullsResolvingBetState r s -> BlobResolvingBetState r s
   SkullsGameOverState p -> BlobGameOverState p
 
-
 gameError
   :: (Applicative m, AllowedTransition SkullsTopology i f)
   => SkullsState f
@@ -373,124 +374,128 @@ gameResult
   -> ActionResult m SkullsTopology SkullsState i GameResult
 gameResult s ev = pureResult (GameResult . Right $ (ev, makeStateBlob s)) s
 
-
-
 skullsMachine
   :: BaseMachine SkullsTopology Command GameResult
-skullsMachine =
-  BaseMachineT
-    { initialState = InitialState SkullsInitialState 
-    , action = \state ->
-        case state of
-            SkullsInitialState -> \case
-              StartGame d
-                | d.idPlayers < PlayerCount 2 ->
-                    gameError state TooFewPlayers
+skullsMachine = BaseMachineT
+  { initialState = InitialState SkullsInitialState 
+  , action = \state -> case state of
+      SkullsInitialState -> \case
+        StartGame d
+          | d.idPlayers < PlayerCount 2 ->
+              gameError state TooFewPlayers
 
-                | otherwise ->
-                    gameResult (mkInitialState d) $ GameStarted d
+          | otherwise ->
+              gameResult (mkInitialState d) $ GameStarted d
 
-              _ -> gameError state GameNotStarted
+        _ -> gameError state GameNotStarted
 
 
-            SkullsPlacingCardsState stateData -> \case
-              PlayCard turnData
-                | stateData.sdCurrentPlayer /= turnData.tdPlayerId ->
-                    gameError state NotYourTurn
+      SkullsPlacingCardsState stateData -> \case
+        PlayCard turnData
+          | stateData.sdCurrentPlayer /= turnData.tdPlayerId ->
+              gameError state NotYourTurn
 
-                | countStackOfPlayer stateData.sdCurrentPlayer stateData == maxCards ->
-                    gameError state NoMoreCardsToPlay
+          | countStackOfPlayer stateData.sdCurrentPlayer stateData == maxCards ->
+              gameError state NoMoreCardsToPlay
 
-                | playedSkull stateData.sdCurrentPlayer stateData ->
-                    gameError state PlayedYourSkull
+          | isSkull turnData.tdCard && playedSkull stateData.sdCurrentPlayer stateData ->
+              gameError state PlayedYourSkull
 
-                | otherwise ->
-                    gameResult (mkCardPlayed stateData turnData) $ CardPlayed turnData
+          | otherwise ->
+              gameResult (mkCardPlayed stateData turnData) $ CardPlayed turnData
 
-              MakeBet bet
-                | stateData.sdCurrentPlayer /= bet.bdPlayerId ->
-                    gameError state NotYourTurn
+        MakeBet bet
+          | stateData.sdCurrentPlayer /= bet.bdPlayerId ->
+              gameError state NotYourTurn
 
-                -- Is it a legal bet size? Then that's fine.
-                | bet.bdFlowers <= totalCardsPlayed stateData ->
-                    gameResult (mkFirstBetMade stateData bet) $ BetMade bet
+          -- Is it a legal bet size? Then that's fine.
+          | bet.bdFlowers <= totalCardsPlayed stateData ->
+              gameResult (mkFirstBetMade stateData bet) $ BetMade bet
 
-                | otherwise -> gameError state BetTooLarge
+          | otherwise -> gameError state BetTooLarge
 
-              StartGame {}  -> gameError state GameAlreadyStarted
-              PassBet {}    -> gameError state CantPassNow
-              PickUpMyStack -> gameError state CantPickUpNow
-              PickUpFrom {} -> gameError state CantPickUpNow
-
-
-            SkullsBettingState (betStateData@BetStateData{bsdHighestBet}) stateData -> \case
-              StartGame {}   -> gameError state GameAlreadyStarted
-              PickUpMyStack  -> gameError state CantPickUpNow
-              PickUpFrom {}  -> gameError state CantPickUpNow
-              PlayCard {}    -> gameError state CantPlaceWhileBetting
-              PassBet newBet
-                | stateData.sdCurrentPlayer /= newBet.pdPlayerId ->
-                    gameError state NotYourTurn
-
-                | otherwise ->
-                    gameResult (SkullsBettingState betStateData (advancePlayer stateData)) $ BetPassed
-
-              MakeBet newBet
-                | stateData.sdCurrentPlayer /= newBet.bdPlayerId ->
-                    gameError state NotYourTurn
-
-                | newBet.bdFlowers <= bsdHighestBet.bdFlowers ->
-                    gameError state BetMustBeHigher
-
-                | otherwise ->
-                    if bettingFinished betStateData stateData
-                       then gameResult (mkResolvingBet stateData newBet) $ BetMade newBet
-                       else gameResult (SkullsBettingState betStateData (advancePlayer stateData)) $ BetMade newBet
+        StartGame {}  -> gameError state GameAlreadyStarted
+        PassBet {}    -> gameError state CantPassNow
+        PickUpMyStack -> gameError state CantPickUpNow
+        PickUpFrom {} -> gameError state CantPickUpNow
 
 
-            SkullsResolvingBetState betToWin stateData ->
-              let pickupFrom p = attemptPickupFrom p betToWin.rbsdFlowersToPickUp stateData
-                  newState = stateData
-                    { sdPlayerStacks = mempty
-                    -- TODO: Mabe the next player changes here; it's not just the first.
-                    , sdCurrentPlayer = firstPlayer
-                    } & recordWin betToWin.rbsdPlayerId
-              in \case
-              StartGame {} -> gameError state GameAlreadyStarted
-              PlayCard {}  -> gameError state CantPlaceWhileBetting
-              MakeBet {}   -> gameError state CantBetNow
-              PassBet {}   -> gameError state CantPassNow
-              PickUpFrom playerId
-                | stateData.sdCurrentPlayer /= betToWin.rbsdPlayerId ->
-                    gameError state NotYourTurn
+      SkullsBettingState (betStateData@BetStateData{bsdHighestBet}) stateData -> \case
+        StartGame {}   -> gameError state GameAlreadyStarted
+        PickUpMyStack  -> gameError state CantPickUpNow
+        PickUpFrom {}  -> gameError state CantPickUpNow
+        PlayCard {}    -> gameError state CantPlaceWhileBetting
+        PassBet newBet
+          | stateData.sdCurrentPlayer /= newBet.pdPlayerId ->
+              gameError state NotYourTurn
 
-                | otherwise ->
-                     case pickupFrom playerId of
-                        WonGame   -> gameResult (SkullsGameOverState betToWin.rbsdPlayerId) $ WonGame
-                        WonRound  -> gameResult (SkullsPlacingCardsState newState) $ WonRound
-                        FailedBet -> gameResult (SkullsPlacingCardsState newState) $ FailedBet
-                        -- TODO: This could be resolved by a type-level
-                        -- `OneOf of these values.
-                        _ -> error "Impossible"
+          | otherwise ->
+              if betWouldFinish betStateData stateData
+                  then gameResult (mkResolvingBet stateData bsdHighestBet) $ BetPassed
+                  else gameResult (mkPassBet betStateData stateData newBet) $ BetPassed
 
-              PickUpMyStack
-                | stateData.sdCurrentPlayer /= betToWin.rbsdPlayerId ->
-                    gameError state NotYourTurn
+        MakeBet newBet
+          | stateData.sdCurrentPlayer /= newBet.bdPlayerId ->
+              gameError state NotYourTurn
 
-                | otherwise ->
-                     case pickupFrom stateData.sdCurrentPlayer of
-                        WonGame   -> gameResult (SkullsGameOverState betToWin.rbsdPlayerId) $ WonGame
-                        WonRound  -> gameResult (SkullsPlacingCardsState newState) $ WonRound
-                        FailedBet -> gameResult (SkullsPlacingCardsState newState) $ FailedBet
-                        -- TODO: This could be resolved by a type-level
-                        -- `OneOf of these values.
-                        _ -> error "Impossible"
+          | newBet.bdFlowers <= bsdHighestBet.bdFlowers ->
+              gameError state BetMustBeHigher
 
-            SkullsGameOverState _ -> const $ gameError state GameIsOver
+          | otherwise ->
+              if betWouldFinish betStateData stateData
+                  then gameResult (mkResolvingBet stateData newBet) $ BetMade newBet
+                  else gameResult (mkRaisingBet betStateData stateData newBet) $ BetMade newBet
 
 
-    }
+      SkullsResolvingBetState betToWin stateData ->
+        let pickupFrom p = attemptPickupFrom p betToWin.rbsdFlowersToPickUp stateData
+            newState = stateData
+              { sdPlayerStacks = initialPlayerStacks stateData.sdTotalPlayers
+              -- TODO: Maybe the next player changes here; it's not just the first.
+              , sdCurrentPlayer = firstPlayer
+              } & recordWin betToWin.rbsdPlayerId
+        in \case
+        StartGame {} -> gameError state GameAlreadyStarted
+        PlayCard {}  -> gameError state CantPlaceWhileBetting
+        MakeBet {}   -> gameError state CantBetNow
+        PassBet {}   -> gameError state CantPassNow
+        PickUpFrom playerId
+          | stateData.sdCurrentPlayer /= betToWin.rbsdPlayerId ->
+              gameError state NotYourTurn
+
+          | countStackOfPlayer stateData.sdCurrentPlayer stateData == 0 ->
+              gameError state CantPickUpZeroCards
+
+          | otherwise ->
+                -- TODO: Need to use 'nsd'.
+                case pickupFrom playerId of
+                  (WonGame, nsd)   -> gameResult (SkullsGameOverState betToWin.rbsdPlayerId) $ WonGame
+                  (WonRound, nsd)  -> gameResult (SkullsPlacingCardsState newState) $ WonRound
+                  (FailedBet, nds) -> gameResult (SkullsPlacingCardsState newState) $ FailedBet
+                  -- TODO: This could be resolved by a type-level
+                  -- `OneOf of these values.
+                  _ -> error "Impossible"
+
+        PickUpMyStack
+          | stateData.sdCurrentPlayer /= betToWin.rbsdPlayerId ->
+              gameError state NotYourTurn
+
+          | otherwise ->
+                case pickupFrom stateData.sdCurrentPlayer of
+                  (WonGame, nsd)   -> gameResult (SkullsGameOverState betToWin.rbsdPlayerId) $ WonGame
+                  (WonRound, nsd)  -> gameResult (SkullsPlacingCardsState newState) $ WonRound
+                  (FailedBet, nsd) -> gameResult (SkullsPlacingCardsState newState) $ FailedBet
+                  -- TODO: This could be resolved by a type-level
+                  -- `OneOf of these values.
+                  _ -> error "Impossible"
+
+      SkullsGameOverState _ -> const $ gameError state GameIsOver
+  }
   where
+    -- Minor hack: Give them an empty list so that it renders in the UI.
+    initialPlayerStacks :: PlayerCount -> Map PlayerId [Card]
+    initialPlayerStacks players = Map.fromList $ [ (PlayerId i, mempty) | i <- [0 .. unPlayerCount players - 1] ]
+
     -- * Starting the game
     mkInitialState :: InitialData -> SkullsState PlacingCards
     mkInitialState d
@@ -498,7 +503,7 @@ skullsMachine =
               StateData
                 { sdCurrentPlayer = d.idStartingPlayer
                 , sdTotalPlayers  = d.idPlayers
-                , sdPlayerStacks  = mempty
+                , sdPlayerStacks  = initialPlayerStacks d.idPlayers
                 , sdWinCounts     = mempty
                 , sdLossCounts    = mempty
                 }
@@ -515,7 +520,26 @@ skullsMachine =
     mkFirstBetMade stateData betData = SkullsBettingState
         (BetStateData
           { bsdHighestBet = betData
-          , bsdPlayersBets = Map.singleton stateData.sdCurrentPlayer (Just betData)
+          , bsdPlayersBets = Map.singleton stateData.sdCurrentPlayer (Right betData)
+          }
+        )
+        (advancePlayer stateData)
+
+    -- * Raising the bet
+    mkRaisingBet :: BetStateData -> StateData -> BetData -> SkullsState Betting
+    mkRaisingBet betStateData stateData betData = SkullsBettingState
+        (betStateData
+          { bsdPlayersBets = Map.insert stateData.sdCurrentPlayer (Right betData) betStateData.bsdPlayersBets
+          , bsdHighestBet = betData
+          }
+        )
+        (advancePlayer stateData)
+
+    -- * Passing
+    mkPassBet :: BetStateData -> StateData -> PassData -> SkullsState Betting
+    mkPassBet betStateData stateData passData = SkullsBettingState
+        (betStateData
+          { bsdPlayersBets = Map.insert stateData.sdCurrentPlayer (Left passData) betStateData.bsdPlayersBets
           }
         )
         (advancePlayer stateData)
@@ -533,199 +557,29 @@ skullsMachine =
                     })
                   newState
 
-
--- TODO: This is wrong! The state it's referring to here is the _past_ state.
---
--- In fact I think this means we might need to switch entirely away from the
--- 'decider' model; because in that setting we can't get the actual state
--- output until the evolve call, which we do not have access to.
--- decideSkulls :: Command -> SkullsState vertex -> GameResult
--- decideSkulls command = GameResult . g . (decideSkulls' command &&& makeStateBlob)
---   where
---     g :: (Either a b, c) -> Either a (b, c)
---     g = \case
---       (Left l, _) -> Left l
---       (Right b, c) -> Right (b, c)
-
--- | Decides the details of which events can trigger state transitions.
--- decideSkulls' :: Command -> SkullsState vertex -> Either GameError Event
--- decideSkulls' command state = case (state, command) of
-  -- ** Starting a game
-  -- (SkullsInitialState, StartGame initialData)
-  --   | initialData.idPlayers < PlayerCount 2 -> Left TooFewPlayers
-  --   | otherwise -> Right $ GameStarted initialData
-
-  -- (SkullsInitialState,         _)            -> Left GameNotStarted
-  -- (SkullsPlacingCardsState {}, StartGame _)  -> Left GameAlreadyStarted
-  -- (SkullsBettingState {},       StartGame _) -> Left GameAlreadyStarted
-
-  -- ** Playing a card
-  -- (SkullsPlacingCardsState stateData, PlayCard turnData)
-  --   | stateData.sdCurrentPlayer /= turnData.tdPlayerId -> Left NotYourTurn
-  --   | countStackOfPlayer stateData.sdCurrentPlayer stateData == maxCards
-  --       -> Left NoMoreCardsToPlay
-  --   | playedSkull stateData.sdCurrentPlayer stateData
-  --       -> Left PlayedYourSkull
-  --   | otherwise -> Right $ CardPlayed turnData
-
-  -- (SkullsBettingState {}, PlayCard _) -> Left CantPlaceWhileBetting
-
-  -- (SkullsPlacingCardsState _, PassBet _) -> Left CantPassNow
-
-  -- ** Making a bet
-  -- (SkullsPlacingCardsState stateData, MakeBet bet)
-  --   | stateData.sdCurrentPlayer /= bet.bdPlayerId -> Left NotYourTurn
-  --   | bet.bdFlowers <= totalCardsPlayed stateData -> Right $ BetMade bet
-  --   | otherwise -> Left $ BetTooLarge
-
-  -- (SkullsBettingState (BetStateData{bsdHighestBet}) stateData, MakeBet newBet)
-  --   | stateData.sdCurrentPlayer /= newBet.bdPlayerId -> Left NotYourTurn
-  --   | newBet.bdFlowers <= bsdHighestBet.bdFlowers -> Left BetMustBeHigher
-  --   | otherwise -> Right $ BetMade newBet
-
-  -- (SkullsBettingState _ stateData, PassBet newBet)
-  --   | stateData.sdCurrentPlayer /= newBet.pdPlayerId -> Left NotYourTurn
-  --   | otherwise -> Right $ BetPassed
-
-  -- (SkullsResolvingBetState betToWin stateData, PickUpMyStack)
-  --   | stateData.sdCurrentPlayer /= betToWin.rbsdPlayerId -> Left NotYourTurn
-    -- | otherwise -> attemptPickupFrom stateData.sdCurrentPlayer betToWin.rbsdFlowersToPickUp stateData
-
-  -- (SkullsResolvingBetState betToWin stateData, PickUpFrom playerId)
-  --   | stateData.sdCurrentPlayer /= betToWin.rbsdPlayerId -> Left NotYourTurn
-    -- | otherwise -> attemptPickupFrom playerId betToWin.rbsdFlowersToPickUp stateData
-
-  -- ** Bookkeeping
-  -- Can't do anything if the same is over.
-  -- (SkullsGameOverState {}, _) -> Left GameIsOver
-
-  -- Can only pick up while betting
-  -- (_, PickUpMyStack) -> Left CantPickUpNow
-  -- (_, PickUpFrom {}) -> Left CantPickUpNow
-
-  -- -- If you're resolving bet, you can only be picking up.
-  -- (SkullsResolvingBetState {}, _) -> Left CanOnlyResolveBetNow
-
-attemptPickupFrom :: PlayerId -> Int -> StateData -> Event
+attemptPickupFrom :: PlayerId -> Int -> StateData -> (Event, StateData)
 attemptPickupFrom playerId flowers stateData =
-  let cards  = countStackOfPlayer playerId stateData
-      toTake = min flowers cards
-  in case takeNCardsFrom toTake playerId stateData of
+  let cards   = countStackOfPlayer playerId stateData
+      canTake = min flowers cards
+  in case takeNCardsFrom canTake playerId stateData of
         -- ** We successfully took N cards.
         --
-        -- Maybe we won, or maybe we keep going.
-        Right _ ->
-          if toTake <= cards
+        -- Maybe we won, or maybe we keep going. It depends on if we could
+        -- take as many as we needed.
+        Right newStateData ->
+          if canTake == flowers
             -- If we don't need to take more; we're done! We win the round.
             -- Let's check if we also win the game.
             then
               let wins = countWins playerId stateData
                in if wins == 2
-                     then WonGame
-                     else WonRound
+                     then (WonGame, newStateData)
+                     else (WonRound, newStateData)
             -- If we do, keep picking up.
-            else PickedUp toTake
+            else (PickedUp canTake, newStateData)
         --
         -- ** We failed; we hit a skull.
-        Left _  -> FailedBet
-
--- | Perfoms state transitions.
--- evolveSkulls
---   :: SkullsState vertex
---   -> GameResult
---   -> EvolutionResult SkullsTopology SkullsState vertex GameResult
--- evolveSkulls state (GameResult eitherErrorEvent) =
---   case eitherErrorEvent of
---   -- Error? Nothing changes.
---   Left _ -> EvolutionResult state
-
---   -- Otherwise, we can do something
---   Right (event, _) -> case (state, event) of
---     -- (SkullsInitialState, GameStarted initialData) ->
---     --   initialResult initialData
-
---     -- (SkullsInitialState, _)    -> EvolutionResult state
---     -- (SkullsGameOverState {}, _) -> EvolutionResult state
-
---     -- ** Place a card.
---     -- i.e. update the cards the player has and move to the next player.SkullsInitialState
---     -- (SkullsPlacingCardsState stateData, CardPlayed turnData) ->
---     --   let newStacks = insertWith (++) (turnData.tdPlayerId) [turnData.tdCard] (stateData.sdPlayerStacks)
---     --     in EvolutionResult $ SkullsPlacingCardsState $
---     --       (advancePlayer stateData) { sdPlayerStacks = newStacks }
-
---     -- Record the first bet, go into the betting state.
---     -- (SkullsPlacingCardsState stateData, BetMade betData) ->
---     --   EvolutionResult $ SkullsBettingState
---     --     (BetStateData
---     --       { bsdHighestBet = betData
---     --       , bsdPlayersBets = Map.singleton stateData.sdCurrentPlayer (Just betData)
---     --       }
---     --     )
---     --     (advancePlayer stateData)
-
---     (SkullsPlacingCardsState {}, _) -> EvolutionResult state
-
-    -- ** Someone raised a bet.
-    -- Throw away the last highest bet, and optionally go into bet resolution,
-    -- if everyone has passed.
-    -- (SkullsBettingState betStateData stateData, BetMade newBet) ->
-    --   -- In betting, we still move around Clockwise
-    --   let newState = advancePlayer stateData
-    --   in if bettingFinished betStateData stateData
-    --         then EvolutionResult $ SkullsResolvingBetState
-    --               (ResolvingBetStateData
-    --                 { rbsdFlowersToPickUp = newBet.bdFlowers
-    --                 , rbsdCurrentFlowersPickedUp = 0
-    --                 , rbsdPlayerId = newBet.bdPlayerId -- The player who made the highest bet
-    --                 })
-    --               newState
-    --        else EvolutionResult $ SkullsBettingState betStateData newState
-
-
-    -- (SkullsBettingState {}, _) -> EvolutionResult state
-
-    -- ** Won a bet.
-    -- (SkullsResolvingBetState betStateData stateData, WonRound) ->
-    --   let newState =
-    --         stateData
-    --           { sdPlayerStacks = mempty
-    --           -- TODO: Mabe the next player changes here; it's not just the first.
-    --           , sdCurrentPlayer = firstPlayer
-    --           } & recordWin betStateData.rbsdPlayerId
-    --    in EvolutionResult $ SkullsPlacingCardsState newState
-
-    -- If you've won two; you win! Otherwise, keep playing.
-    -- (SkullsResolvingBetState betStateData _, WonGame) ->
-    --   EvolutionResult $ SkullsGameOverState betStateData.rbsdPlayerId
-
-    -- ** Failed a bet; just count it and go back to the start.
-    -- (SkullsResolvingBetState betStateData stateData, FailedBet) ->
-    --   let newState =
-    --         stateData
-    --           { sdPlayerStacks = mempty
-    --             -- TODO: Mabe the next player changes here; it's not just the first.
-    --           , sdCurrentPlayer = firstPlayer
-    --           } & recordLoss betStateData.rbsdPlayerId
-    --   in EvolutionResult $ SkullsPlacingCardsState newState
-
-    -- (SkullsResolvingBetState {}, _) -> EvolutionResult state
-
-
--- initialResult
---   :: (AllowedTransition SkullsTopology initialVertex PlacingCards)
---   => InitialData
---   -> EvolutionResult SkullsTopology SkullsState initialVertex GameResult
--- initialResult initialData =
---   EvolutionResult $
---     SkullsPlacingCardsState $
---       StateData
---         { sdCurrentPlayer = initialData.idStartingPlayer
---         , sdTotalPlayers  = initialData.idPlayers
---         , sdPlayerStacks  = mempty
---         , sdWinCounts     = mempty
---         , sdLossCounts    = mempty
---         }
+        Left HitSkull  -> (FailedBet, stateData)
 
 
 -- * Rendering

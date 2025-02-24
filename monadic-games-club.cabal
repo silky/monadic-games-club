@@ -118,7 +118,9 @@ test-suite monadic-games-club-spec
   build-tool-depends:
       hspec-discover:hspec-discover
   build-depends:
-      base >=4.15 && <4.19
+      QuickCheck
+    , base >=4.15 && <4.19
+    , containers
     , crem
     , hspec
     , monadic-games-club

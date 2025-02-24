@@ -1,11 +1,12 @@
 {
   inputs = {
-    flake-utils.url = "github:numtide/flake-utils";
-    nixpkgs.url     = "github:NixOS/nixpkgs/nixos-unstable";
-    crem.url        = "github:marcosh/crem";
+    flake-utils.url   = "github:numtide/flake-utils";
+    nixpkgs.url       = "github:NixOS/nixpkgs/nixos-unstable";
+    crem.url          = "github:marcosh/crem";
+    ghc-wasm-meta.url = "gitlab:ghc/ghc-wasm-meta?host=gitlab.haskell.org";
   };
 
-  outputs = { self, nixpkgs, flake-utils, crem }:
+  outputs = { self, nixpkgs, flake-utils, crem, ghc-wasm-meta }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -35,6 +36,9 @@
                 };
               };
             in with pkgs; [
+              # For JS version
+              ghc-wasm-meta.packages.${system}.all_9_6
+
               cabalWrapped
               ghcid
               hpack
@@ -59,6 +63,7 @@
                 wai
                 warp
                 websockets
+                QuickCheck
 
                 # For css
                 clay
