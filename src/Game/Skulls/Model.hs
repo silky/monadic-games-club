@@ -60,11 +60,18 @@ maxFlowers :: Int
 maxFlowers = 4
 
 maxCards :: Int
-maxCards = maxFlowers + 1
+maxCards = maxFlowers + maxSkulls
+
+maxSkulls :: Int
+maxSkulls = 1
 
 isSkull :: Card -> Bool
 isSkull Skull = True
 isSkull Flower = False
+
+isFlower :: Card -> Bool
+isFlower Skull = False
+isFlower Flower = True
 
 newtype PlayerId = PlayerId Int
   deriving stock (Generic)
@@ -310,6 +317,7 @@ data GameError
   -- ** Resolving a bet
   | PickedUpSkull
   | CantBetNow
+  | CantPickUpZeroCards
 
   -- ** Generic
   | NotYourTurn
@@ -455,11 +463,15 @@ skullsMachine = BaseMachineT
           | stateData.sdCurrentPlayer /= betToWin.rbsdPlayerId ->
               gameError state NotYourTurn
 
+          | countStackOfPlayer stateData.sdCurrentPlayer stateData == 0 ->
+              gameError state CantPickUpZeroCards
+
           | otherwise ->
+                -- TODO: Need to use 'nsd'.
                 case pickupFrom playerId of
-                  WonGame   -> gameResult (SkullsGameOverState betToWin.rbsdPlayerId) $ WonGame
-                  WonRound  -> gameResult (SkullsPlacingCardsState newState) $ WonRound
-                  FailedBet -> gameResult (SkullsPlacingCardsState newState) $ FailedBet
+                  (WonGame, nsd)   -> gameResult (SkullsGameOverState betToWin.rbsdPlayerId) $ WonGame
+                  (WonRound, nsd)  -> gameResult (SkullsPlacingCardsState newState) $ WonRound
+                  (FailedBet, nds) -> gameResult (SkullsPlacingCardsState newState) $ FailedBet
                   -- TODO: This could be resolved by a type-level
                   -- `OneOf of these values.
                   _ -> error "Impossible"
@@ -470,9 +482,9 @@ skullsMachine = BaseMachineT
 
           | otherwise ->
                 case pickupFrom stateData.sdCurrentPlayer of
-                  WonGame   -> gameResult (SkullsGameOverState betToWin.rbsdPlayerId) $ WonGame
-                  WonRound  -> gameResult (SkullsPlacingCardsState newState) $ WonRound
-                  FailedBet -> gameResult (SkullsPlacingCardsState newState) $ FailedBet
+                  (WonGame, nsd)   -> gameResult (SkullsGameOverState betToWin.rbsdPlayerId) $ WonGame
+                  (WonRound, nsd)  -> gameResult (SkullsPlacingCardsState newState) $ WonRound
+                  (FailedBet, nsd) -> gameResult (SkullsPlacingCardsState newState) $ FailedBet
                   -- TODO: This could be resolved by a type-level
                   -- `OneOf of these values.
                   _ -> error "Impossible"
@@ -545,30 +557,29 @@ skullsMachine = BaseMachineT
                     })
                   newState
 
-attemptPickupFrom :: PlayerId -> Int -> StateData -> Event
+attemptPickupFrom :: PlayerId -> Int -> StateData -> (Event, StateData)
 attemptPickupFrom playerId flowers stateData =
-  let cards  = countStackOfPlayer playerId stateData
-      toTake = min flowers cards
-      -- TODO: The logic here isn't right. This doesn't correctly calculate if
-      -- we won our not!
-  in case takeNCardsFrom toTake playerId stateData of
+  let cards   = countStackOfPlayer playerId stateData
+      canTake = min flowers cards
+  in case takeNCardsFrom canTake playerId stateData of
         -- ** We successfully took N cards.
         --
-        -- Maybe we won, or maybe we keep going.
-        Right _ ->
-          if toTake <= cards
+        -- Maybe we won, or maybe we keep going. It depends on if we could
+        -- take as many as we needed.
+        Right newStateData ->
+          if canTake == flowers
             -- If we don't need to take more; we're done! We win the round.
             -- Let's check if we also win the game.
             then
               let wins = countWins playerId stateData
                in if wins == 2
-                     then WonGame
-                     else WonRound
+                     then (WonGame, newStateData)
+                     else (WonRound, newStateData)
             -- If we do, keep picking up.
-            else PickedUp toTake
+            else (PickedUp canTake, newStateData)
         --
         -- ** We failed; we hit a skull.
-        Left _  -> FailedBet
+        Left HitSkull  -> (FailedBet, stateData)
 
 
 -- * Rendering

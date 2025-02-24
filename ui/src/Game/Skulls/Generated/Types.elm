@@ -117,6 +117,7 @@ type GameError
     | CanOnlyResolveBetNow
     | PickedUpSkull
     | CantBetNow
+    | CantPickUpZeroCards
     | NotYourTurn
     | GameIsOver
 
@@ -135,6 +136,7 @@ showGameError x = case x of
     CanOnlyResolveBetNow -> "CanOnlyResolveBetNow"
     PickedUpSkull -> "PickedUpSkull"
     CantBetNow -> "CantBetNow"
+    CantPickUpZeroCards -> "CantPickUpZeroCards"
     NotYourTurn -> "NotYourTurn"
     GameIsOver -> "GameIsOver"
 
@@ -153,6 +155,7 @@ readGameError x = case x of
     "CanOnlyResolveBetNow" -> Just CanOnlyResolveBetNow
     "PickedUpSkull" -> Just PickedUpSkull
     "CantBetNow" -> Just CantBetNow
+    "CantPickUpZeroCards" -> Just CantPickUpZeroCards
     "NotYourTurn" -> Just NotYourTurn
     "GameIsOver" -> Just GameIsOver
     _ -> Nothing
@@ -171,6 +174,7 @@ universeGameError = [ TooFewPlayers
                     , CanOnlyResolveBetNow
                     , PickedUpSkull
                     , CantBetNow
+                    , CantPickUpZeroCards
                     , NotYourTurn
                     , GameIsOver ]
 

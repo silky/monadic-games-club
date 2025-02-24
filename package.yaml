@@ -83,4 +83,6 @@ tests:
     dependencies:
       - monadic-games-club
       - hspec
+      - QuickCheck
+      - containers
     build-tools: hspec-discover:hspec-discover
